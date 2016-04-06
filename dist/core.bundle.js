@@ -24589,8 +24589,437 @@ module.exports = isObject;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{}],39:[function(require,module,exports){
+var H = require('coreutil/core');
+var N = require('./src/network');
+
+H.root.N = N;
+
+module.exports = N;
+},{"./src/network":40,"coreutil/core":1}],40:[function(require,module,exports){
+
+var N = {};
+
+var C = require('coreutil/core');
+var Enc = null;
+var Parser = require('./parse');
+
+var noop = function() {};
+
+C.root.serverPath = N.serverPath = "http://dev.indoorstar.com/ids/";
+C.root.dataServer = N.dataServer = "http://indoorstar.com:6601/";
+C.root.innerServer = N.innerServer = "http://dev.indoorstar.com:6603/ids/";
+
+N.setActionHeader = function(url) {
+    C.root.serverPath = N.serverPath = url;
+};
+
+N.setEncActionHeader = function(url) {
+    C.root.innerServer = N.innerServer = url;
+};
+
+N.injectEncryptionModule = function(E) {
+    Enc = E;
+};
+
+/**
+ * parses action response, assumes a {dmst} structure
+ *
+ * input:
+ * string
+ * arraybuffer
+ * object
+ *
+ * type:
+ * `string`: string
+ * `object`: object
+ * `buffer`: arraybuffer
+ *
+ * @param actionResult input data
+ * @param type desired output format of `d`
+ * @return {Object} responseObject with data in `d`
+ * @throws {Error} error with error message
+ */
+function parseActionResponse(actionResult, type) {
+    if (!actionResult) throw new Error('Empty Response');
+    if (actionResult instanceof ArrayBuffer) {
+        if (type && type == 'buffer') {
+            actionResult = Parser.parseActionBufferDepth1(actionResult);
+        } else if (type && type == 'string') {
+            actionResult = Parser.parseArrayBufferToJsonWithStringInD(actionResult);
+        } else {//} if (type && type == 'object') { //default
+            actionResult = Parser.parseArrayBufferToJsonObject(actionResult);
+        }
+    }
+    //for json object
+    if (!actionResult.hasOwnProperty('s')) throw new Error('Invalid Response');
+    if (actionResult.s !== 0) throw new Error(actionResult.m || 'Unknown Error');
+    var hasBody = actionResult.d != null && actionResult.d != "null";
+    if (hasBody) {
+        try {
+            return JSON.parse(actionResult.d);
+        } catch (e) {
+            //if not a json, this will fail very quickly
+            if (Enc) {
+                try {
+                    return Enc.handleActionRaw(actionResult.d);
+                } catch (e) {
+                    console.warn("Decode rawdata failed!");
+                    return actionResult.d;
+                }
+            } else {
+                console.warn("No encryption module found in network module!");
+                return actionResult.d; //no encryption module
+            }
+        }
+    }
+    return actionResult.d;
+}
+
+function parseHeaders(headerString) {
+    var hs = (headerString || "").split("\r\n") || [];
+    var rs = {};
+    for (var i = 0; i < hs.length; i++) {
+        var f = (hs[i] || "").indexOf(":");
+        if (f !== -1) {
+            rs[hs[i].substring(0, f)] = hs[i].substring(f + 1, hs[i].length).trim();
+        }
+    }
+    return rs;
+}
+
+var executors = {
+    'arraybuffer': 'arrayBuffer',
+    'raw': 'text',
+    'json': 'json',
+    'blob': 'blob',
+    'form': 'formData'
+};
+
+var prepareRequest = function(url, method, async, data, type, callback, errback, trace) {
+    var req = {};
+    req.request = new XMLHttpRequest();
+
+    req.open = function() {
+        req.request.open();
+    };
+    req.cancel = function() {
+        req.request.abort();
+    };
+
+    //var isBuffer = type == 'arraybuffer';
+
+    if (type == executors.arraybuffer) {
+        req.request.responseType = "arraybuffer";
+    } else if (type == executors.blob) {
+        req.request.responseType = "blob";
+    }
+
+    req.request.onreadystatechange = function() {
+        if (req.request.readyState === 3) {
+            if (!req.headers) {
+                req.headers = parseHeaders(req.request.getAllResponseHeaders());
+            }
+        } else if (req.request.readyState === 4 && (req.request.status === 200 || req.request.status === 0)) {
+            if (type == executors.json) {
+                callback(JSON.parse(req.request.responseText));
+            } else {
+                callback(req.request.response || req.request.responseText);
+            }
+        } else if (req.request.readyState === 4) {
+            errback(trace);
+        }
+    };
+
+    req.request.open(method, url, async);
+
+    req.setRange = function(start, end) {
+        start = ~~start;
+        end = ~~end;
+        if (!isNaN(start) && !isNaN(end)) req.request.setRequestHeader("Range", "bytes=" + start + "-" + end);
+    };
+
+    var send = function() {
+        if (method === "POST") {
+            setTimeout(function() {
+                if (req.request.readyState === 1) {
+                    req.request.send(C.param(data));
+                }
+            }, 0);
+        } else {
+            setTimeout(function() {
+                if (req.request.readyState === 1) {
+                    req.request.send(null);
+                }
+            }, 0);
+        }
+    };
+
+    req.send = function() {
+        try {
+            send();
+        } catch (e) {}
+    };
+
+    return req;
+};
+
+var innerGetRequest = function(url, type, callback, errback, trace) {
+    prepareRequest(url, 'GET', true, null, type, callback, errback, trace).send();
+};
+
+var innerPostRequest = function(url, type, data, callback, errback, trace) {
+    prepareRequest(url, 'POST', true, data, null, callback, errback, trace).send();
+};
+
+N.getRequest = function(url, callback, errback, type) {
+    return innerGetRequest(url, executors[type || 'raw'], callback, errback);
+};
+
+N.getJson = function(url, callback, errback, overrideType) {
+    return innerGetRequest(url, executors[overrideType || 'json'], callback, errback);
+};
+
+N.getBuffer = function(url, callback, errback) {
+    return innerGetRequest(url, executors.arraybuffer, callback, errback);
+};
+
+N.getBlob = function(url, callback, errback) {
+    return innerGetRequest(url, executors.blob, callback, errback);
+};
+
+N.getForm = function(url, callback, errback) {
+    return innerGetRequest(url, executors.form, callback, errback);
+};
+
+N.getRaw = function(url, callback, errback) {
+    return innerGetRequest(url, executors.arraybuffer, function(d) {
+        try {
+            callback(Enc.handleActionRaw(d));
+        } catch (e) {
+            callback(d);
+        }
+    }, errback);
+};
+
+N.postRequest = function(url, body, callback, errback) {
+    return innerPostRequest(url, {}, body, callback, errback);
+};
+
+N.postForm = function(url, form, callback, errback) {
+    return N.postRequest(url, new FormData(form), callback, errback);
+};
+
+N.postJson = function(url, json, callback, errback) {
+    return innerPostRequest(url, {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+    }, json, callback, errback);
+};
+
+N.postFile = function(url, file, callback, errback) {
+    file = file instanceof File ? file : file.files[0];
+    var form = new FormData();
+    form.append('file', file);
+    N.postForm(url, form, callback, errback);
+};
+
+N.cGetAction = function(server, action, params, callback, errback, type) {
+    return N.getBuffer(C.getUrlByParams(server, action, params), function(obj) {
+        (callback || noop)(parseActionResponse(obj, type));
+    }, errback);
+};
+
+N.getAction = function(action, params, callback, errback) {
+    return N.cGetAction(N.serverPath, action, params, callback, errback);
+};
+
+N.get = N.getRequest;
+
+N.cPostAction = function(server, action, params, data, callback, errback) {
+    return N.postRequest(C.getUrlByParams(server, action, params), C.param(data), callback, errback);
+};
+
+N.postAction = function(action, params, data, callback, errback) {
+    return N.cPostAction(N.serverPath, action, params, data, callback, errback);
+};
+
+N.post = N.postRequest;
+
+module.exports = N;
+},{"./parse":41,"coreutil/core":1}],41:[function(require,module,exports){
+
+var encoding = require('coreutil/src/encoding');
+
+var Parse = {};
+
+var QUOTE = '"'.charCodeAt(0);
+var SQUOTE = "'".charCodeAt(0);
+var COLON = ":".charCodeAt(0);
+var COMMA = ",".charCodeAt(0);
+var D = 'd'.charCodeAt(0);
+var M = 'm'.charCodeAt(0);
+var S = 's'.charCodeAt(0);
+var T = 't'.charCodeAt(0);
+
+function parseArrayBufferToJsonObject(arraybuffer) {
+    return JSON.parse(encoding.ab2s(arraybuffer));
+}
+
+function parseArrayBufferToJsonWithStringInD(arraybuffer) {
+    var obj = parseArrayBufferJsonDepth1(arraybuffer);
+
+    if (obj.d && obj.d instanceof ArrayBuffer) {
+        obj.d = encoding.ba2s(obj.d);
+    }
+
+    return obj;
+}
+
+//parse dmst to simple object with arraybuffer in `d`
+function parseArrayBufferJsonDepth1(arraybuffer) {
+    var uint = new Uint8Array(arraybuffer);
+    var length = uint.length;
+
+    if (length < 14) {
+        return JSON.parse(encoding.ab2s(arraybuffer));
+    }
+
+    var quoteSense = false;
+    var lastQuote = null;
+    var swap;
+
+    //dStart: d block start, should be `"` in string or `n` in null
+    //mStart, sStart, tStart: header start, should be `"` or `d`/`s`/`t`
+    var dStart = 0, mStart = 0, sStart = 0, tStart = 0;
+
+    //generally speaking, `d` in head and `m,s,t` in tail
+    SearchD:
+        for (var i = 0; i < length; i++) {
+            swap = uint[i];
+            switch (swap) {
+                case QUOTE:
+                case SQUOTE:
+                    lastQuote = swap;
+                    quoteSense = true;
+                    break;
+                case D:
+                    if (!quoteSense && (length - i) > 1 && uint[i + 1] === COLON) {
+                        //catch 'd'
+                        dStart = i + 2;
+                        break SearchD;
+                    }
+                    if ((quoteSense && (length - i) > 2 && uint[i + 1] === lastQuote &&
+                        uint[i + 2] === COLON)) {
+                        //catch "d": or 'd':
+                        dStart = i + 3;
+                        break SearchD;
+                    }
+                    quoteSense = false;
+                    break;
+                default:
+                    quoteSense = false;
+                    break;
+            }
+        }
+
+    var colonSense = false;
+    quoteSense = false;
+
+    SearchMST:
+        for (i = length + 1; --i;) {
+            var got = undefined;
+            swap = uint[i - 1];
+            switch (swap) {
+                case QUOTE:
+                case SQUOTE:
+                    if (colonSense) {
+                        colonSense = false;
+                        quoteSense = true;
+                    }
+                    lastQuote = swap;
+                    break;
+                case COLON:
+                    colonSense = true;
+                    break;
+                case M:
+                case S:
+                case T:
+                    if (i > 4 && quoteSense) {
+                        //expect next quote
+                        if (uint[i - 2] === lastQuote) {
+                            //got it
+                            got = i - 4;
+                        }
+                    } else if (i > 3 && colonSense && uint[i - 2] === COMMA) {
+                        //got it
+                        got = i - 3;
+                    }
+                    if (got !== undefined) {
+                        switch (swap) {
+                            case M:
+                                mStart = got;
+                                break;
+                            case S:
+                                sStart = got;
+                                break;
+                            case T:
+                                tStart = got;
+                                break;
+                            default:
+                                break;
+                        }
+                        if (mStart && tStart && sStart) {
+                            break SearchMST;
+                        }
+                    }
+                    colonSense = false;
+                    quoteSense = false;
+                    break;
+                default:
+                    colonSense = false;
+                    quoteSense = false;
+            }
+        }
+
+    if (mStart && sStart && tStart && dStart) {
+        //found
+        var min = mStart;
+        if (min > sStart) min = sStart;
+        if (min > tStart) min = tStart;
+        //string should be cut by 2 bytes
+        if (uint[min] === QUOTE || uint[min] === SQUOTE) {
+            if (uint[dStart] === QUOTE || uint[dStart] === SQUOTE) {
+                dStart++;
+                min--;
+            }
+        }
+        var dBuffer = arraybuffer.slice(dStart, min + 1); //inc, exc
+        var leftLength = length - dBuffer.byteLength;
+        var leftBuffer = new ArrayBuffer(leftLength);
+        var left = new Uint8Array(leftBuffer);
+        for (var j = 0; j < dStart; j++) {
+            left[j] = uint[j];
+        }
+        for (var k = min + 1; k < length; k++) {
+            left[j++] = uint[k];
+        }
+        var obj = JSON.parse(encoding.ab2s(leftBuffer));
+        obj.d = dBuffer;
+        return obj;
+    } else {
+        return JSON.parse(encoding.ab2s(arraybuffer));
+    }
+}
+
+Parse.parseArrayBufferToJsonObject = parseArrayBufferToJsonObject;
+Parse.parseArrayBufferToJsonWithStringInD = parseArrayBufferToJsonWithStringInD;
+Parse.parseActionBufferDepth1 = parseArrayBufferJsonDepth1;
+
+module.exports = Parse;
+},{"coreutil/src/encoding":8}],42:[function(require,module,exports){
 var DOM = require('domutil/dom');
 var H = require('coreutil/core');
+var N = require('networkutil/network');
 
 var C = require('./src/compatibility');
 
@@ -24598,9 +25027,11 @@ H.extend(H, DOM);
 H.extend(H, C);
 
 H.root.H = H;
+//without encryption module
+H.root.N = N;
 
 module.exports = H;
-},{"./src/compatibility":40,"coreutil/core":1,"domutil/dom":22}],40:[function(require,module,exports){
+},{"./src/compatibility":43,"coreutil/core":1,"domutil/dom":22,"networkutil/network":39}],43:[function(require,module,exports){
 var C = {};
 
 var H$ = require('domutil/dom');
@@ -24654,7 +25085,7 @@ C.random = function(min, max) {
 };
 
 module.exports = C;
-},{"coreutil/core":1,"domutil/dom":22}],41:[function(require,module,exports){
+},{"coreutil/core":1,"domutil/dom":22}],44:[function(require,module,exports){
 var Core = require('./core');
 var H = require('coreutil/utils');
 
@@ -24663,4 +25094,4 @@ Core.extend(Core, H);
 Core.root.H = Core;
 
 module.exports = Core;
-},{"./core":39,"coreutil/utils":21}]},{},[41]);
+},{"./core":42,"coreutil/utils":21}]},{},[44]);

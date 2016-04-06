@@ -6,7 +6,7 @@ Core.extend(Core, require('./src/iterator'));
 Core.root.H = Core;
 
 module.exports = Core;
-},{"./src/core":6,"./src/iterator":9}],2:[function(require,module,exports){
+},{"./src/core":6,"./src/iterator":10}],2:[function(require,module,exports){
 /*
  * MiniCore module
  *
@@ -176,7 +176,7 @@ ARS.wrapperGen = function(identifier) {
 };
 
 module.exports = ARS;
-},{"../mini":2,"./shims":14}],4:[function(require,module,exports){
+},{"../mini":2,"./shims":15}],4:[function(require,module,exports){
 var A = {};
 
 /**
@@ -446,7 +446,7 @@ C.clearTimer = function(timer) {
 };
 
 module.exports = C;
-},{"./abstractresultset":3,"./arraybuffer":4,"./cef_interactions":5,"./detect":7,"./event":8,"./math":10,"./object":11,"./raf":12,"./resultset":13,"./shims":14,"./stacktrace":15,"./storage":16,"./testers":17,"./urlutils":18,"./uuid":19,"lodash/core":31}],7:[function(require,module,exports){
+},{"./abstractresultset":3,"./arraybuffer":4,"./cef_interactions":5,"./detect":7,"./event":9,"./math":11,"./object":12,"./raf":13,"./resultset":14,"./shims":15,"./stacktrace":16,"./storage":17,"./testers":18,"./urlutils":19,"./uuid":20,"lodash/core":32}],7:[function(require,module,exports){
 /*
  * Env Detection Module
  */
@@ -629,7 +629,603 @@ C.isWebGLSupported();
 C.language = C.isNodejs ? "" : (navigator.language || navigator['browserLanguage'] || "").toLowerCase();
 
 module.exports = C;
-},{"lodash/isArrayLike":32}],8:[function(require,module,exports){
+},{"lodash/isArrayLike":33}],8:[function(require,module,exports){
+/*
+ * String Encoding
+ * Binary Operation
+ * String Convertion
+ */
+var ES = {};
+
+/*
+ * Possible input
+ *
+ * 1 ArrayBuffer of raw data bytes
+ * 2 Array of raw data bytes
+ * 3 Array of char codes (UTF-16)
+ * 4 Raw data string
+ * 5 Unicode String
+ *
+ * Possible output
+ *
+ * 1 ArrayBuffer of raw data bytes
+ * 2 Array of raw data bytes
+ * 3 Array of char codes (UTF-16)
+ * 4 String of raw data
+ * 5 Unicode String
+ */
+
+var B10000000 = 0x80;
+var B11000000 = 0xC0;
+var B11100000 = 0xE0;
+var B11110000 = 0xF0;
+var B11111000 = 0xF8;
+var B11111100 = 0xFC;
+//noinspection JSUnusedLocalSymbols
+var B11111110 = 0xFE;
+var B00000001 = 0x01;
+var B00000011 = 0x03;
+var B00000111 = 0x07;
+var B00001111 = 0x0F;
+var B00011111 = 0x1F;
+var B00111111 = 0x3F;
+//noinspection JSUnusedLocalSymbols
+var B01111111 = 0x7F;
+var B11111111 = 0xFF;
+
+/*
+ * Used for ArrayBuffer extension
+ */
+//function allocByteArray(length, isBuffer) {
+//    if (isBuffer) {
+//        return new Int8Array(length);
+//    } else {
+//        return new Array(length);
+//    }
+//}
+//
+//function allocIntArray(length, isBuffer) {
+//    if (isBuffer) {
+//        return new Int32Array(length);
+//    } else {
+//        return new Array(length);
+//    }
+//}
+
+/**
+ * Unicode Int Array -> Unicode String
+ *
+ * @static
+ * @memberof H
+ * @param {Array|ArrayBuffer|Uint8Array} ar unicode int array or arraybuffer
+ * @returns {string} unicode string
+ */
+function unicodeIntArrayToString(ar) {
+    if (ar instanceof ArrayBuffer) {
+        ar = new Uint8Array(ar);
+    }
+    var result = "";
+    var l = ar.byteLength || ar.length;
+    var length = ar.byteLength || ar.length;
+    for (l += 1; --l;) {
+        result += String.fromCharCode(ar[length - l]);
+    }
+    return result;
+}
+
+/**
+ * Unicode String -> Unicode Int Array
+ *
+ * @static
+ * @memberof H
+ * @param {String} str unicode string (including ascii string)
+ * @returns {Array} unicode int array
+ */
+function stringToUnicodeIntArray(str) {
+    var length = str.length;
+    var result = new Array(length);
+    for (length += 1; --length;) {
+        result[length - 1] = str.charCodeAt(length - 1);
+    }
+    return result;
+}
+
+/**
+ * Utf16 String -> Byte Array (represented in UTF-8)
+ *
+ * @static
+ * @memberof H
+ * @param {String} str unicode string
+ * @returns {Array} utf-8 byte array
+ */
+function stringToUtf8ByteArray(str) {
+    var out = [], l = str.length;
+    var n = str.length;
+    for (l++; --l;) {
+        var i = n - l;
+        var c = str.charCodeAt(i);
+        if (c < 0x80) {
+            out[out.length] = c;
+        } else if (c < 0x800) {
+            out[out.length] = 0xc0 | (c >> 6);
+            out[out.length] = 0x80 | (c & 0x3f);
+        } else if (c < 0xd800 || c >= 0xe000) {
+            out[out.length] = 0xe0 | (c >> 12);
+            out[out.length] = 0x80 | ((c >> 6) & 0x3f);
+            out[out.length] = 0x80 | (c & 0x3f);
+        } else {
+            // surrogate pair
+            --l;
+            // UTF-16 encodes 0x10000-0x10FFFF by
+            // subtracting 0x10000 and splitting the
+            // 20 bits of 0x0-0xFFFFF into two halves
+            c = 0x10000 + (((c & 0x3ff) << 10)
+                | (str.charCodeAt(i) & 0x3ff));
+            out[out.length] = 0xf0 | (c >> 18);
+            out[out.length] = 0x80 | ((c >> 12) & 0x3f);
+            out[out.length] = 0x80 | ((c >> 6) & 0x3f);
+            out[out.length] = 0x80 | (c & 0x3f);
+        }
+    }
+    return out;
+}
+
+/**
+ * Utf16 String -> ArrayBuffer (Uint8Array) representing UTF-8
+ *
+ * @static
+ * @memberof H
+ * @param {String} str utf-16 string
+ * @return {Uint8Array} utf-8 arraybuffer
+ */
+function stringToArrayBuffer(str) {
+    var byteLength = str.length * 3;
+    var isString = typeof str == 'string';
+    var out = new Uint8Array(byteLength);
+    var pc = 0;
+    for (var i = 0; i < str.length; i++) {
+        var c = isString ? str.charCodeAt(i) : str[i];
+        if (c < 0x80) {
+            out[out.length] = c;
+            pc++;
+        } else if (c < 0x800) {
+            out[out.length] = 0xc0 | (c >> 6);
+            out[out.length] = 0x80 | (c & 0x3f);
+            pc += 2;
+        } else if (c < 0xd800 || c >= 0xe000) {
+            out[out.length] = 0xe0 | (c >> 12);
+            out[out.length] = 0x80 | ((c >> 6) & 0x3f);
+            out[out.length] = 0x80 | (c & 0x3f);
+            pc += 3;
+        } else {
+            // surrogate pair
+            --l;
+            // UTF-16 encodes 0x10000-0x10FFFF by
+            // subtracting 0x10000 and splitting the
+            // 20 bits of 0x0-0xFFFFF into two halves
+            c = 0x10000 + (((c & 0x3ff)<<10) | (c & 0x3ff));
+            out[out.length] = 0xf0 | (c >> 18);
+            out[out.length] = 0x80 | ((c >> 12) & 0x3f);
+            out[out.length] = 0x80 | ((c >> 6) & 0x3f);
+            out[out.length] = 0x80 | (c & 0x3f);
+            pc += 4;
+        }
+    }
+    if (ArrayBuffer.prototype.slice) {
+        return out.slice(0, pc);
+    } else {
+        var output = new Uint8Array(pc);
+        for (var j = 0; j < pc; j++) {
+            output[j] = out[j];
+        }
+        return output;
+    }
+}
+
+/**
+ * Utf16 Array -> ArrayBuffer (Uint8Array) (in UTF-8)
+ * @type {stringToArrayBuffer}
+ */
+var utf16ArrayToArrayBuffer = stringToArrayBuffer;
+
+/**
+ * Byte Array (UTF-8) -> Unicode String
+ * Uint8Array (UTF-8) -> Unicode String **bug here**
+ *
+ * @static
+ * @memberof H
+ * @param {Array|ArrayBuffer|Uint8Array} data byte array or uint8array in UTF-8 encoding
+ * @returns {string} unicode string
+ */
+function utf8ByteArrayToUnicodeString(data) { // array of bytes
+    if (data instanceof ArrayBuffer) {
+        data = new Uint8Array(data);
+    }
+    var str = '',
+        i, l = data.byteLength || data.length, s = data.byteLength || data.length;
+
+    for (l++; --l;) {
+        i = s - l;
+        if (l < 0) break;
+        var value = data[i];
+
+        //accept Unicode char code also
+        if (value < 0x80 || value > 0xFF) {
+            str += String.fromCharCode(value);
+        } else if (value > 0xBF && value < 0xE0) {
+            str += String.fromCharCode((value & 0x1F) << 6 | data[i + 1] & 0x3F);
+            --l;
+        } else if (value > 0xDF && value < 0xF0) {
+            str += String.fromCharCode((value & 0x0F) << 12 | (data[i + 1] & 0x3F) << 6 | data[i + 2] & 0x3F);
+            l -= 2;
+        } else if (value < 0x100) {
+            // surrogate pair
+            var charCode = ((value & 0x07) << 18 | (data[i + 1] & 0x3F) << 12 | (data[i + 2] & 0x3F) << 6 | data[i + 3] & 0x3F) - 0x010000;
+
+            str += String.fromCharCode(charCode >> 10 | 0xD800, charCode & 0x03FF | 0xDC00);
+            l -= 3;
+        }
+    }
+
+    return str;
+}
+
+/**
+ * Byte Array (UTF-8 representation) -> Int Array (UTF-16 representation)
+ * Uint8Array (UTF-8 representation) -> Int Array (UTF-16 representation)
+ *
+ * @static
+ * @memberof H
+ * @param {Array|Uint8Array|ArrayBuffer} arr byte array in UTF-8 encoding
+ * @return {Array} utf-16 int array
+ */
+function byteArrayToUtf16Array(arr) {
+    var used = 0;
+    var l;
+    var length = l = (arr.byteLength || arr.length), i, t, byteCount, rev;
+    for (l += 1;--l;) {
+        rev = 0;
+        i = length - l;
+        t = arr[i];
+        if (t < B10000000) {
+            byteCount = 0;
+            rev = B11111111;
+        } else if (t < B11000000) {
+            //will not happen
+            byteCount = 0;
+            rev = B11111111;
+        } else if (t < B11100000) {
+            //U-00000080 - U-000007FF: 110xxxxx 10xxxxxx
+            byteCount = 1;
+            rev = B00011111;
+        } else if (t < B11110000) {
+            //U-00000800 - U-0000FFFF: 1110xxxx 10xxxxxx 10xxxxxx
+            byteCount = 2;
+            rev = B00001111;
+        } else if (t < B11111000) {
+            //U-00010000 - U-001FFFFF: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
+            byteCount = 3;
+            rev = B00000111;
+        }
+        //NOTE: 4 and 5 are not safe, cuz `<<` operation is over 32bit (int)
+        //NOTE: javascript byte operations use int(32bit)
+        else if (t < B11111100) {
+            //U-00200000 - U-03FFFFFF: 111110xx 10xxxxxx 10xxxxxx 10xxxxxx 10xxxxxx
+            byteCount = 4;
+            rev = B00000011;
+        } else {
+            //U-04000000 - U-7FFFFFFF: 1111110x 10xxxxxx 10xxxxxx 10xxxxxx 10xxxxxx 10xxxxxx
+            byteCount = 5;
+            rev = B00000001;
+        }
+
+        var allc = byteCount;
+        var result = 0;
+        if (byteCount) {
+            for (byteCount += 1; --byteCount;) {
+                //byteCount: bc -> 1
+                result += ((arr[i + byteCount] & B00111111) << (6 * (allc - byteCount)));
+            }
+        }
+        result |= (t & rev) << (allc * 6);
+        arr[used++] = result;
+        l -= allc;
+        if (l <= 0) {
+            break;
+        }
+    }
+    arr.length = used;
+    return arr;
+}
+
+/**
+ * UTF-16 Int Array -> Byte Array (representing UTF-8 chars)
+ *
+ * @static
+ * @memberof H
+ * @param {Array} ia utf-16 int array
+ * @returns {Array} utf-8 byte array
+ */
+function utf16ArrayToByteArray(ia) {
+    var out = [];
+    for (var i = 0; i < ia.length; i++) {
+        var c = ia[i];
+        if (c < 0x80) {
+            out[out.length] = c;
+        } else if (c < 0x800) {
+            out[out.length] = 0xc0 | (c >> 6);
+            out[out.length] = 0x80 | (c & 0x3f);
+        } else if (c < 0xd800 || c >= 0xe000) {
+            out[out.length] = 0xe0 | (c >> 12);
+            out[out.length] = 0x80 | ((c >> 6) & 0x3f);
+            out[out.length] = 0x80 | (c & 0x3f);
+        } else {
+            // surrogate pair
+            // UTF-16 encodes 0x10000-0x10FFFF by
+            // subtracting 0x10000 and splitting the
+            // 20 bits of 0x0-0xFFFFF into two halves
+            c = 0x10000 + (((c & 0x3ff) << 10)
+                | (ia[i] & 0x3ff));
+            out[out.length] = 0xf0 | (c >> 18);
+            out[out.length] = 0x80 | ((c >> 12) & 0x3f);
+            out[out.length] = 0x80 | ((c >> 6) & 0x3f);
+            out[out.length] = 0x80 | (c & 0x3f);
+            i++;
+        }
+    }
+    return out;
+}
+
+/**
+ * ASCII String of UTF-8 Byte Array -> Unicode String
+ *
+ * @static
+ * @memberof H
+ * @param {String} str ascii string of utf-8 byte array
+ * @returns {string} unicode string in utf-16 encoding
+ */
+function utf8ByteStringToUnicodeString(str) {
+    //bs -> ba
+    //ba -> us
+    return utf8ByteArrayToUnicodeString(stringToUnicodeIntArray(str));
+}
+
+/**
+ * Unicode String -> ASCII String of UTF-8 Byte Array
+ *
+ * @static
+ * @memberof H
+ * @param {String} str unicode string
+ * @return {String} ascii string of utf-8 encoded byte array
+ */
+function unicodeStringToUtf8ByteString(str) {
+    //us -> ba
+    //ba -> s
+    return unicodeIntArrayToString(stringToUtf8ByteArray(str));
+}
+
+/**
+ * Raw String (UTF-8 Bytes) -> Uint8Array
+ * no validality check
+ *
+ * @static
+ * @memberof H
+ * @param {String} str ascii string in utf-8 encoding
+ * @return {Uint8Array} result arraybuffer
+ */
+function utf8ByteStringToUint8Array(str) {
+    var length = str.length;
+    var out = new Uint8Array(length);
+    for (var i = 0; i < length; i++) {
+        out[i] = str.charCodeAt(i);
+    }
+    return out;
+}
+
+/*
+ * `Binary String` is the binary representation of a number
+ */
+
+/**
+ * Decimal String -> Binary String
+ *
+ * @static
+ * @memberof H
+ * @param {String} d string of decimal number
+ * @returns {string} string of binary representation of the specific number
+ */
+function numberToBinaryString(d) {
+    return Number(d).toString(2);
+}
+
+//noinspection JSUnusedLocalSymbols
+/**
+ * String (might be byte string) -> Unicode string
+ * but much (1x) slower than E.ba2s(E.s2a())
+ *
+ * @private
+ * @deprecated
+ * @param {String} str unicode string
+ * @returns {string} utf8 string
+ */
+function strintToUtf8String(str) {
+    //noinspection JSDeprecatedSymbols
+    return decodeURIComponent(escape(str));
+}
+
+function hex(i) {
+    if (!i) return "??";
+    return ("00" + (i & 0xff).toString(16)).slice(-2);
+}
+
+/**
+ * Get a well-printed JSON string
+ *
+ * @static
+ * @memberof H
+ * @param {Object} jsonObject json object to encode
+ */
+ES.getPrettyJson = function(jsonObject) {
+    return JSON.stringify(jsonObject, null, "\t");
+};
+
+/**
+ * Alias of H.numberToBinaryString
+ *
+ * @static
+ * @memberof H
+ * @type {H.numberToBinaryString}
+ */
+ES.n2bin = numberToBinaryString;
+/**
+ * Get the hex representation string of a number (less than 256/0xFF)
+ *
+ * @static
+ * @memberof H
+ * @param {Number} i
+ * @returns {String} hex string
+ */
+ES.hex = hex;
+
+//3-5, 5-3; 3-4, 4-3; 1-4
+//Array of charcode <-> Unicode String
+/**
+ * ArrayBuffer to ByteString
+ * UnicodeIntArray to UnicodeString
+ *
+ * @static
+ * @memberof H
+ * @type {H.unicodeIntArrayToString}
+ */
+ES.ab2bs = ES.ua2s = unicodeIntArrayToString;
+/**
+ * UnicodeString to UnicodeIntArray
+ *
+ * @static
+ * @memberof H
+ * @type {H.stringToUnicodeIntArray}
+ */
+ES.s2ua = stringToUnicodeIntArray;
+
+//4-5, 5-4
+//Raw data string <-> Unicode String
+/**
+ * UnicodeString to AsciiByteString
+ *
+ * @static
+ * @memberof H
+ * @type {H.unicodeStringToUtf8ByteString}
+ */
+ES.us2bs = unicodeStringToUtf8ByteString;
+/**
+ * Utf-8 ByteString to UnicodeString
+ * @type {H.utf8ByteStringToUnicodeString}
+ */
+ES.bs2us = utf8ByteStringToUnicodeString;
+
+//2-5, 5-2; 2-4, 4-2; ?, 1-5
+//Unicode String <-> Array of raw data bytes
+/**
+ * Unicode String to ByteArray
+ *
+ * @static
+ * @memberof H
+ * @type {H.stringToUtf8ByteArray}
+ */
+ES.s2ba = stringToUtf8ByteArray; //str to binary arr (utf8)
+/**
+ * ByteArray to UnicodeString
+ * ArrayBuffer to UnicodeString
+ *
+ * @static
+ * @memberof H
+ * @type {H.utf8ByteArrayToUnicodeString}
+ */
+ES.ab2s = ES.ba2s = utf8ByteArrayToUnicodeString; //binary arr (utf8) to str
+
+//2-3, 3-2; 1-3
+/**
+ * ByteArray to Utf16IntArray
+ *
+ * @static
+ * @memberof H
+ * @type {H.byteArrayToUtf16Array}
+ */
+ES.ba2ia = byteArrayToUtf16Array; //binary array to int array
+/**
+ * Utf16IntArray to ByteArray
+ *
+ * @static
+ * @memberof H
+ * @type {H.utf16ArrayToByteArray}
+ */
+ES.ia2ba = utf16ArrayToByteArray;
+
+//meaningless: 1-2, 2-1
+
+//4-1
+/**
+ * AsciiByteString to ArrayBuffer
+ *
+ * @static
+ * @memberof H
+ * @type {H.utf8ByteStringToUint8Array}
+ */
+ES.bs2ab = utf8ByteStringToUint8Array;
+//5-1
+/**
+ * UnicodeString to ArrayBuffer(Uint8Array)
+ *
+ * @static
+ * @memberof H
+ * @type {H.stringToArrayBuffer}
+ */
+ES.s2ab = stringToArrayBuffer;
+//3-1
+/**
+ * IntArray to ArrayBuffer
+ *
+ * @static
+ * @memberof H
+ * @type {stringToArrayBuffer}
+ */
+ES.a2ab = utf16ArrayToArrayBuffer;
+
+//aliases
+/**
+ * Unicode CharArray to String, alias of H.ua2s
+ *
+ * @static
+ * @memberof H
+ * @type {*|unicodeIntArrayToString}
+ */
+ES.a2s = ES.ua2s; //unicode char array to str
+/**
+ * UnicodeString to UnicodeIntArray
+ *
+ * @static
+ * @memberof H
+ * @type {*|stringToUnicodeIntArray}
+ */
+ES.s2a = ES.s2ua; //str to unicode char array
+
+/**
+ * ByteArray to UnicodeIntArray, alias of E.ba2ia
+ * @type {*|byteArrayToUtf16Array}
+ */
+ES.ba2ua = ES.ba2ia; //alias
+
+/**
+ * String to UnicodeString
+ *
+ * @static
+ * @memberof H|E
+ * @type {H.utf8ByteStringToUnicodeString}
+ */
+ES.s2us = ES.bs2us;
+
+module.exports = ES;
+},{}],9:[function(require,module,exports){
 /*
  * Custom Event Manipulation Module
  */
@@ -759,7 +1355,7 @@ E.EventDispatcher = function() {
 };
 
 module.exports = E;
-},{"./iterator":9,"./uuid":19}],9:[function(require,module,exports){
+},{"./iterator":10,"./uuid":20}],10:[function(require,module,exports){
 /*
  * Iterator Logic Module
  */
@@ -955,7 +1551,7 @@ I.filter = function(ele, fn) {
 };
 
 module.exports = I;
-},{"../mini":2,"lodash/core":31}],10:[function(require,module,exports){
+},{"../mini":2,"lodash/core":32}],11:[function(require,module,exports){
 /*
  * Math-Related Module
  */
@@ -1242,7 +1838,7 @@ Ms.distOnEarth = function(p0, p1) {
 };
 
 module.exports = Ms;
-},{"../mini":2,"./stacktrace":15}],11:[function(require,module,exports){
+},{"../mini":2,"./stacktrace":16}],12:[function(require,module,exports){
 /*
  * Object-Related Module
  */
@@ -1305,7 +1901,7 @@ O.cloneByParse = function(obj) {
 };
 
 module.exports = O;
-},{"./stacktrace":15}],12:[function(require,module,exports){
+},{"./stacktrace":16}],13:[function(require,module,exports){
 var root = require('./detect').root;
 
 root.requestAnimationFrame = (function() {
@@ -1318,7 +1914,7 @@ root.requestAnimationFrame = (function() {
             return root.setTimeout(callback, 1000 / 60);
         };
 })();
-},{"./detect":7}],13:[function(require,module,exports){
+},{"./detect":7}],14:[function(require,module,exports){
 /*
  * ResultSet Module
  */
@@ -1508,7 +2104,7 @@ RS.wrap = wrap;
 RS.fastWrap = wrap;
 
 module.exports = RS;
-},{"./abstractresultset":3,"./iterator":9,"lodash/core":31}],14:[function(require,module,exports){
+},{"./abstractresultset":3,"./iterator":10,"lodash/core":32}],15:[function(require,module,exports){
 var S = {};
 
 var H = require('./detect');
@@ -1641,7 +2237,7 @@ S.addProperty = addProperty;
 S.createObject = createObject;
 
 module.exports = S;
-},{"./detect":7}],15:[function(require,module,exports){
+},{"./detect":7}],16:[function(require,module,exports){
 var C = {};
 
 var Mini = require('../mini');
@@ -1740,7 +2336,7 @@ Error.prototype.getStackTrace = C.getStackTrace;
 Error.prototype.printStackTrace = printStackTrace;
 
 module.exports = C;
-},{"../mini":2}],16:[function(require,module,exports){
+},{"../mini":2}],17:[function(require,module,exports){
 var C = {};
 var H = require('./stacktrace');
 var Detect = require('./detect');
@@ -1851,7 +2447,7 @@ function removeItemFallback(key) {
 }
 
 module.exports = C;
-},{"./detect":7,"./stacktrace":15}],17:[function(require,module,exports){
+},{"./detect":7,"./stacktrace":16}],18:[function(require,module,exports){
 var C = {};
 
 C.now = Date.now;
@@ -1937,7 +2533,7 @@ C.profileTimes = function(cb, times, title) {
 };
 
 module.exports = C;
-},{}],18:[function(require,module,exports){
+},{}],19:[function(require,module,exports){
 var C = {};
 
 var I = require('./iterator');
@@ -2029,7 +2625,7 @@ C.param = function(data) {
 };
 
 module.exports = C;
-},{"./detect":7,"./iterator":9}],19:[function(require,module,exports){
+},{"./detect":7,"./iterator":10}],20:[function(require,module,exports){
 var C = {};
 
 /**
@@ -2093,7 +2689,7 @@ C.fastUuid = function() {
 };
 
 module.exports = C;
-},{}],20:[function(require,module,exports){
+},{}],21:[function(require,module,exports){
 var DOM = require('./src/cssselector');
 
 var Core = require('coreutil/core');
@@ -2106,7 +2702,7 @@ Core.extend(Core, Attr);
 Core.root.H$ = DOM;
 
 module.exports = DOM;
-},{"./src/cssattribute":22,"./src/cssselector":24,"./src/domresultset":25,"coreutil/core":1}],21:[function(require,module,exports){
+},{"./src/cssattribute":23,"./src/cssselector":25,"./src/domresultset":26,"coreutil/core":1}],22:[function(require,module,exports){
 var Func = require('./funchelper');
 
 var Attr = {};
@@ -2239,7 +2835,7 @@ Attr.addClass = classOpGen(true);
 Attr.removeClass = classOpGen(false);
 
 module.exports = Attr;
-},{"./funchelper":26}],22:[function(require,module,exports){
+},{"./funchelper":27}],23:[function(require,module,exports){
 /*
  * CSS Attribute Operation Basic
  */
@@ -2384,7 +2980,7 @@ Attr.getSingleElement = getSingleElement;
 Attr.setCssAttribute = walkAndSetAttributes;
 
 module.exports = Attr;
-},{"./funchelper":26,"./vendor":28,"coreutil/mini":2}],23:[function(require,module,exports){
+},{"./funchelper":27,"./vendor":29,"coreutil/mini":2}],24:[function(require,module,exports){
 /*
  * CSS Attributes Operate
  */
@@ -2447,7 +3043,7 @@ Ops.cssAttr = function(attr, value) {
  */
 
 module.exports = Ops;
-},{"./cssattribute":22,"./funchelper":26,"coreutil/core":1}],24:[function(require,module,exports){
+},{"./cssattribute":23,"./funchelper":27,"coreutil/core":1}],25:[function(require,module,exports){
 var RS = require('./domresultset');
 var wrap = RS.wrapDom;
 var Mini = require('coreutil/mini');
@@ -2488,7 +3084,7 @@ var $ = function(selector) {
 $.findElement = findElement;
 
 module.exports = $;
-},{"./domresultset":25,"coreutil/mini":2}],25:[function(require,module,exports){
+},{"./domresultset":26,"coreutil/mini":2}],26:[function(require,module,exports){
 var RS = {};
 
 var ARS =      require('coreutil/src/abstractresultset');
@@ -2594,7 +3190,7 @@ RS.wrapDom = wrap;
 RS.H$ = Selector;
 
 module.exports = RS;
-},{"./attribute":21,"./cssoperators":23,"./cssselector":24,"./nodeop":27,"coreutil/mini":2,"coreutil/src/abstractresultset":3}],26:[function(require,module,exports){
+},{"./attribute":22,"./cssoperators":24,"./cssselector":25,"./nodeop":28,"coreutil/mini":2,"coreutil/src/abstractresultset":3}],27:[function(require,module,exports){
 var Func = {};
 var Mini = require('coreutil/mini');
 
@@ -2671,7 +3267,7 @@ Func.arrayEnsureContains = ensureArrayContains;
 Func.arrayEnsureWithout = ensureArrayWithout;
 
 module.exports = Func;
-},{"coreutil/mini":2}],27:[function(require,module,exports){
+},{"coreutil/mini":2}],28:[function(require,module,exports){
 var N = {};
 
 var Func = require('./funchelper');
@@ -2746,7 +3342,7 @@ N.insertHead = insertAtHead;
 N.insertTail = insertAtEnd;
 
 module.exports = N;
-},{"./funchelper":26,"coreutil/mini":2}],28:[function(require,module,exports){
+},{"./funchelper":27,"coreutil/mini":2}],29:[function(require,module,exports){
 /*
  * Vendor specified properties list
  */
@@ -3875,7 +4471,7 @@ V.query = function(attr) {
 };
 
 module.exports = V;
-},{}],29:[function(require,module,exports){
+},{}],30:[function(require,module,exports){
 /**
  * The base implementation of `_.property` without support for deep paths.
  *
@@ -3891,7 +4487,7 @@ function baseProperty(key) {
 
 module.exports = baseProperty;
 
-},{}],30:[function(require,module,exports){
+},{}],31:[function(require,module,exports){
 var baseProperty = require('./_baseProperty');
 
 /**
@@ -3909,7 +4505,7 @@ var getLength = baseProperty('length');
 
 module.exports = getLength;
 
-},{"./_baseProperty":29}],31:[function(require,module,exports){
+},{"./_baseProperty":30}],32:[function(require,module,exports){
 (function (global){
 /**
  * @license
@@ -7901,7 +8497,7 @@ module.exports = getLength;
 }.call(this));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],32:[function(require,module,exports){
+},{}],33:[function(require,module,exports){
 var getLength = require('./_getLength'),
     isFunction = require('./isFunction'),
     isLength = require('./isLength');
@@ -7937,7 +8533,7 @@ function isArrayLike(value) {
 
 module.exports = isArrayLike;
 
-},{"./_getLength":30,"./isFunction":33,"./isLength":34}],33:[function(require,module,exports){
+},{"./_getLength":31,"./isFunction":34,"./isLength":35}],34:[function(require,module,exports){
 var isObject = require('./isObject');
 
 /** `Object#toString` result references. */
@@ -7982,7 +8578,7 @@ function isFunction(value) {
 
 module.exports = isFunction;
 
-},{"./isObject":35}],34:[function(require,module,exports){
+},{"./isObject":36}],35:[function(require,module,exports){
 /** Used as references for various `Number` constants. */
 var MAX_SAFE_INTEGER = 9007199254740991;
 
@@ -8020,7 +8616,7 @@ function isLength(value) {
 
 module.exports = isLength;
 
-},{}],35:[function(require,module,exports){
+},{}],36:[function(require,module,exports){
 /**
  * Checks if `value` is the
  * [language type](http://www.ecma-international.org/ecma-262/6.0/#sec-ecmascript-language-types)
@@ -8053,9 +8649,438 @@ function isObject(value) {
 
 module.exports = isObject;
 
-},{}],36:[function(require,module,exports){
+},{}],37:[function(require,module,exports){
+var H = require('coreutil/core');
+var N = require('./src/network');
+
+H.root.N = N;
+
+module.exports = N;
+},{"./src/network":38,"coreutil/core":1}],38:[function(require,module,exports){
+
+var N = {};
+
+var C = require('coreutil/core');
+var Enc = null;
+var Parser = require('./parse');
+
+var noop = function() {};
+
+C.root.serverPath = N.serverPath = "http://dev.indoorstar.com/ids/";
+C.root.dataServer = N.dataServer = "http://indoorstar.com:6601/";
+C.root.innerServer = N.innerServer = "http://dev.indoorstar.com:6603/ids/";
+
+N.setActionHeader = function(url) {
+    C.root.serverPath = N.serverPath = url;
+};
+
+N.setEncActionHeader = function(url) {
+    C.root.innerServer = N.innerServer = url;
+};
+
+N.injectEncryptionModule = function(E) {
+    Enc = E;
+};
+
+/**
+ * parses action response, assumes a {dmst} structure
+ *
+ * input:
+ * string
+ * arraybuffer
+ * object
+ *
+ * type:
+ * `string`: string
+ * `object`: object
+ * `buffer`: arraybuffer
+ *
+ * @param actionResult input data
+ * @param type desired output format of `d`
+ * @return {Object} responseObject with data in `d`
+ * @throws {Error} error with error message
+ */
+function parseActionResponse(actionResult, type) {
+    if (!actionResult) throw new Error('Empty Response');
+    if (actionResult instanceof ArrayBuffer) {
+        if (type && type == 'buffer') {
+            actionResult = Parser.parseActionBufferDepth1(actionResult);
+        } else if (type && type == 'string') {
+            actionResult = Parser.parseArrayBufferToJsonWithStringInD(actionResult);
+        } else {//} if (type && type == 'object') { //default
+            actionResult = Parser.parseArrayBufferToJsonObject(actionResult);
+        }
+    }
+    //for json object
+    if (!actionResult.hasOwnProperty('s')) throw new Error('Invalid Response');
+    if (actionResult.s !== 0) throw new Error(actionResult.m || 'Unknown Error');
+    var hasBody = actionResult.d != null && actionResult.d != "null";
+    if (hasBody) {
+        try {
+            return JSON.parse(actionResult.d);
+        } catch (e) {
+            //if not a json, this will fail very quickly
+            if (Enc) {
+                try {
+                    return Enc.handleActionRaw(actionResult.d);
+                } catch (e) {
+                    console.warn("Decode rawdata failed!");
+                    return actionResult.d;
+                }
+            } else {
+                console.warn("No encryption module found in network module!");
+                return actionResult.d; //no encryption module
+            }
+        }
+    }
+    return actionResult.d;
+}
+
+function parseHeaders(headerString) {
+    var hs = (headerString || "").split("\r\n") || [];
+    var rs = {};
+    for (var i = 0; i < hs.length; i++) {
+        var f = (hs[i] || "").indexOf(":");
+        if (f !== -1) {
+            rs[hs[i].substring(0, f)] = hs[i].substring(f + 1, hs[i].length).trim();
+        }
+    }
+    return rs;
+}
+
+var executors = {
+    'arraybuffer': 'arrayBuffer',
+    'raw': 'text',
+    'json': 'json',
+    'blob': 'blob',
+    'form': 'formData'
+};
+
+var prepareRequest = function(url, method, async, data, type, callback, errback, trace) {
+    var req = {};
+    req.request = new XMLHttpRequest();
+
+    req.open = function() {
+        req.request.open();
+    };
+    req.cancel = function() {
+        req.request.abort();
+    };
+
+    //var isBuffer = type == 'arraybuffer';
+
+    if (type == executors.arraybuffer) {
+        req.request.responseType = "arraybuffer";
+    } else if (type == executors.blob) {
+        req.request.responseType = "blob";
+    }
+
+    req.request.onreadystatechange = function() {
+        if (req.request.readyState === 3) {
+            if (!req.headers) {
+                req.headers = parseHeaders(req.request.getAllResponseHeaders());
+            }
+        } else if (req.request.readyState === 4 && (req.request.status === 200 || req.request.status === 0)) {
+            if (type == executors.json) {
+                callback(JSON.parse(req.request.responseText));
+            } else {
+                callback(req.request.response || req.request.responseText);
+            }
+        } else if (req.request.readyState === 4) {
+            errback(trace);
+        }
+    };
+
+    req.request.open(method, url, async);
+
+    req.setRange = function(start, end) {
+        start = ~~start;
+        end = ~~end;
+        if (!isNaN(start) && !isNaN(end)) req.request.setRequestHeader("Range", "bytes=" + start + "-" + end);
+    };
+
+    var send = function() {
+        if (method === "POST") {
+            setTimeout(function() {
+                if (req.request.readyState === 1) {
+                    req.request.send(C.param(data));
+                }
+            }, 0);
+        } else {
+            setTimeout(function() {
+                if (req.request.readyState === 1) {
+                    req.request.send(null);
+                }
+            }, 0);
+        }
+    };
+
+    req.send = function() {
+        try {
+            send();
+        } catch (e) {}
+    };
+
+    return req;
+};
+
+var innerGetRequest = function(url, type, callback, errback, trace) {
+    prepareRequest(url, 'GET', true, null, type, callback, errback, trace).send();
+};
+
+var innerPostRequest = function(url, type, data, callback, errback, trace) {
+    prepareRequest(url, 'POST', true, data, null, callback, errback, trace).send();
+};
+
+N.getRequest = function(url, callback, errback, type) {
+    return innerGetRequest(url, executors[type || 'raw'], callback, errback);
+};
+
+N.getJson = function(url, callback, errback, overrideType) {
+    return innerGetRequest(url, executors[overrideType || 'json'], callback, errback);
+};
+
+N.getBuffer = function(url, callback, errback) {
+    return innerGetRequest(url, executors.arraybuffer, callback, errback);
+};
+
+N.getBlob = function(url, callback, errback) {
+    return innerGetRequest(url, executors.blob, callback, errback);
+};
+
+N.getForm = function(url, callback, errback) {
+    return innerGetRequest(url, executors.form, callback, errback);
+};
+
+N.getRaw = function(url, callback, errback) {
+    return innerGetRequest(url, executors.arraybuffer, function(d) {
+        try {
+            callback(Enc.handleActionRaw(d));
+        } catch (e) {
+            callback(d);
+        }
+    }, errback);
+};
+
+N.postRequest = function(url, body, callback, errback) {
+    return innerPostRequest(url, {}, body, callback, errback);
+};
+
+N.postForm = function(url, form, callback, errback) {
+    return N.postRequest(url, new FormData(form), callback, errback);
+};
+
+N.postJson = function(url, json, callback, errback) {
+    return innerPostRequest(url, {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+    }, json, callback, errback);
+};
+
+N.postFile = function(url, file, callback, errback) {
+    file = file instanceof File ? file : file.files[0];
+    var form = new FormData();
+    form.append('file', file);
+    N.postForm(url, form, callback, errback);
+};
+
+N.cGetAction = function(server, action, params, callback, errback, type) {
+    return N.getBuffer(C.getUrlByParams(server, action, params), function(obj) {
+        (callback || noop)(parseActionResponse(obj, type));
+    }, errback);
+};
+
+N.getAction = function(action, params, callback, errback) {
+    return N.cGetAction(N.serverPath, action, params, callback, errback);
+};
+
+N.get = N.getRequest;
+
+N.cPostAction = function(server, action, params, data, callback, errback) {
+    return N.postRequest(C.getUrlByParams(server, action, params), C.param(data), callback, errback);
+};
+
+N.postAction = function(action, params, data, callback, errback) {
+    return N.cPostAction(N.serverPath, action, params, data, callback, errback);
+};
+
+N.post = N.postRequest;
+
+module.exports = N;
+},{"./parse":39,"coreutil/core":1}],39:[function(require,module,exports){
+
+var encoding = require('coreutil/src/encoding');
+
+var Parse = {};
+
+var QUOTE = '"'.charCodeAt(0);
+var SQUOTE = "'".charCodeAt(0);
+var COLON = ":".charCodeAt(0);
+var COMMA = ",".charCodeAt(0);
+var D = 'd'.charCodeAt(0);
+var M = 'm'.charCodeAt(0);
+var S = 's'.charCodeAt(0);
+var T = 't'.charCodeAt(0);
+
+function parseArrayBufferToJsonObject(arraybuffer) {
+    return JSON.parse(encoding.ab2s(arraybuffer));
+}
+
+function parseArrayBufferToJsonWithStringInD(arraybuffer) {
+    var obj = parseArrayBufferJsonDepth1(arraybuffer);
+
+    if (obj.d && obj.d instanceof ArrayBuffer) {
+        obj.d = encoding.ba2s(obj.d);
+    }
+
+    return obj;
+}
+
+//parse dmst to simple object with arraybuffer in `d`
+function parseArrayBufferJsonDepth1(arraybuffer) {
+    var uint = new Uint8Array(arraybuffer);
+    var length = uint.length;
+
+    if (length < 14) {
+        return JSON.parse(encoding.ab2s(arraybuffer));
+    }
+
+    var quoteSense = false;
+    var lastQuote = null;
+    var swap;
+
+    //dStart: d block start, should be `"` in string or `n` in null
+    //mStart, sStart, tStart: header start, should be `"` or `d`/`s`/`t`
+    var dStart = 0, mStart = 0, sStart = 0, tStart = 0;
+
+    //generally speaking, `d` in head and `m,s,t` in tail
+    SearchD:
+        for (var i = 0; i < length; i++) {
+            swap = uint[i];
+            switch (swap) {
+                case QUOTE:
+                case SQUOTE:
+                    lastQuote = swap;
+                    quoteSense = true;
+                    break;
+                case D:
+                    if (!quoteSense && (length - i) > 1 && uint[i + 1] === COLON) {
+                        //catch 'd'
+                        dStart = i + 2;
+                        break SearchD;
+                    }
+                    if ((quoteSense && (length - i) > 2 && uint[i + 1] === lastQuote &&
+                        uint[i + 2] === COLON)) {
+                        //catch "d": or 'd':
+                        dStart = i + 3;
+                        break SearchD;
+                    }
+                    quoteSense = false;
+                    break;
+                default:
+                    quoteSense = false;
+                    break;
+            }
+        }
+
+    var colonSense = false;
+    quoteSense = false;
+
+    SearchMST:
+        for (i = length + 1; --i;) {
+            var got = undefined;
+            swap = uint[i - 1];
+            switch (swap) {
+                case QUOTE:
+                case SQUOTE:
+                    if (colonSense) {
+                        colonSense = false;
+                        quoteSense = true;
+                    }
+                    lastQuote = swap;
+                    break;
+                case COLON:
+                    colonSense = true;
+                    break;
+                case M:
+                case S:
+                case T:
+                    if (i > 4 && quoteSense) {
+                        //expect next quote
+                        if (uint[i - 2] === lastQuote) {
+                            //got it
+                            got = i - 4;
+                        }
+                    } else if (i > 3 && colonSense && uint[i - 2] === COMMA) {
+                        //got it
+                        got = i - 3;
+                    }
+                    if (got !== undefined) {
+                        switch (swap) {
+                            case M:
+                                mStart = got;
+                                break;
+                            case S:
+                                sStart = got;
+                                break;
+                            case T:
+                                tStart = got;
+                                break;
+                            default:
+                                break;
+                        }
+                        if (mStart && tStart && sStart) {
+                            break SearchMST;
+                        }
+                    }
+                    colonSense = false;
+                    quoteSense = false;
+                    break;
+                default:
+                    colonSense = false;
+                    quoteSense = false;
+            }
+        }
+
+    if (mStart && sStart && tStart && dStart) {
+        //found
+        var min = mStart;
+        if (min > sStart) min = sStart;
+        if (min > tStart) min = tStart;
+        //string should be cut by 2 bytes
+        if (uint[min] === QUOTE || uint[min] === SQUOTE) {
+            if (uint[dStart] === QUOTE || uint[dStart] === SQUOTE) {
+                dStart++;
+                min--;
+            }
+        }
+        var dBuffer = arraybuffer.slice(dStart, min + 1); //inc, exc
+        var leftLength = length - dBuffer.byteLength;
+        var leftBuffer = new ArrayBuffer(leftLength);
+        var left = new Uint8Array(leftBuffer);
+        for (var j = 0; j < dStart; j++) {
+            left[j] = uint[j];
+        }
+        for (var k = min + 1; k < length; k++) {
+            left[j++] = uint[k];
+        }
+        var obj = JSON.parse(encoding.ab2s(leftBuffer));
+        obj.d = dBuffer;
+        return obj;
+    } else {
+        return JSON.parse(encoding.ab2s(arraybuffer));
+    }
+}
+
+Parse.parseArrayBufferToJsonObject = parseArrayBufferToJsonObject;
+Parse.parseArrayBufferToJsonWithStringInD = parseArrayBufferToJsonWithStringInD;
+Parse.parseActionBufferDepth1 = parseArrayBufferJsonDepth1;
+
+module.exports = Parse;
+},{"coreutil/src/encoding":8}],40:[function(require,module,exports){
 var DOM = require('domutil/dom');
 var H = require('coreutil/core');
+var N = require('networkutil/network');
 
 var C = require('./src/compatibility');
 
@@ -8063,9 +9088,11 @@ H.extend(H, DOM);
 H.extend(H, C);
 
 H.root.H = H;
+//without encryption module
+H.root.N = N;
 
 module.exports = H;
-},{"./src/compatibility":37,"coreutil/core":1,"domutil/dom":20}],37:[function(require,module,exports){
+},{"./src/compatibility":41,"coreutil/core":1,"domutil/dom":21,"networkutil/network":37}],41:[function(require,module,exports){
 var C = {};
 
 var H$ = require('domutil/dom');
@@ -8119,4 +9146,4 @@ C.random = function(min, max) {
 };
 
 module.exports = C;
-},{"coreutil/core":1,"domutil/dom":20}]},{},[36]);
+},{"coreutil/core":1,"domutil/dom":21}]},{},[40]);

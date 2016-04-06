@@ -1,6 +1,6 @@
 {
   "name": "utils",
-  "version": "1.0.0",
+  "version": "0.0.2",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -21,6 +21,7 @@
   "homepage": "https://github.com/saglibs/utils#readme",
   "dependencies": {
     "coreutil": "saglibs/coreutil",
+    "networkutil": "saglibs/networkutil",
     "domutil": "saglibs/domutil"
   },
   "devDependencies": {
