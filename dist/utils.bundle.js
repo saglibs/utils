@@ -158,8 +158,13 @@ ARS.wrapperGen = function(identifier) {
     }
 
     function transformArray(obj) {
-        if (Mini.isArrayLike(obj)) {
-            Mini.arrayEach(obj, transformArray);
+        if (Mini.isArrayLike(obj) && typeof obj != 'string') {
+            Mini.arrayEach(obj, function(son) {
+                //if input is a string, will cause infinite loop
+                if (son !== obj || typeof obj !== 'object') {
+                    transformArray(son);
+                }
+            });
         }
         transform(obj, identifier);
     }
@@ -358,6 +363,8 @@ var RS = require('./resultset');
 
 var C = {};
 
+C.__isRoot__ = true;
+
 _.extend(C, _);
 _.extend(C, Detect);
 _.extend(C, StackTrace);
@@ -456,6 +463,8 @@ module.exports = C;
  */
 
 var C = {};
+
+C.__isRoot__ = true;
 
 C.isArrayLike = require('lodash/isArrayLike');
 
@@ -1954,7 +1963,7 @@ var RsIdentifier = '__isRS__';
 //the default ResultSet should not exclude any values
 //noinspection JSUnusedLocalSymbols
 function checker(val) {
-    return true;
+    return !val['__isRoot__'];
 }
 
 //default channel doesn't need filter
@@ -3132,18 +3141,27 @@ var Mini = require('coreutil/mini');
 /**
  * Search elements in the current ResultSet.
  *
- * @param {Array|Element|NodeList} ele ResultSet to check
- * @param {String} selector CSS selector string
+ * @param {Array|Element|NodeList|Node} ele ResultSet to check
+ * @param {String|NodeList|Node|Window} selector CSS selector string
  * @returns {*} ResultSet of elements
  */
 function findElement(ele, selector) {
 
-    //if is RS, wrap it
-    if (typeof selector !== 'string'
-        && (selector instanceof NodeList
-        || selector instanceof Element
-        || Mini.isArrayLike(selector))) {
-        return wrap(selector);
+    //top element is `html`, not document
+
+    //if selector is RS or window/document, wrap it
+    if (typeof selector !== 'string') {
+        if (selector === window || selector === document
+            || (selector instanceof Node && !(selector instanceof Element))) {
+            //css operations not allowed for window, but event operations allowed.
+            //TODO: add dom event module, make a splitter and change code here
+            return wrap(document.querySelectorAll('html'));
+        }
+        if (selector instanceof NodeList
+            || selector instanceof Element
+            || Mini.isArrayLike(selector)) {
+            return wrap(selector);
+        }
     }
 
     if (ele === document) {
@@ -3190,11 +3208,12 @@ try {
 }
 
 function checker(val) {
-    if (val instanceof Array || val instanceof htmlElementObj) {
+    if (val instanceof Array || val instanceof htmlElementObj || val instanceof NodeList) {
         return true;
     }
 }
 
+//, Node.prototype node can be added as event targets, but not css now.
 ARS.registerChannel(DomIdentifier, [Element.prototype, Array.prototype, NodeList.prototype], checker);
 
 function registerComponent(name, func) {
