@@ -3368,10 +3368,10 @@ function basePender(strategy) {
     };
 }
 
-var baseAppend = basePender(insertElementAfter);
-var basePrepend = basePender(insertElementBefore);
-var baseInsertHead = basePender(insertElementAtBeginning);
-var baseInsertEnd = basePender(insertElementAtEnd);
+var baseAppend = basePender(insertElementAtEnd);
+var basePrepend = basePender(insertElementAtBeginning);
+var baseInsertHead = basePender(insertElementBefore);
+var baseInsertEnd = basePender(insertElementAfter);
 
 //can be abstracted
 function pender(basePender) {
