@@ -3119,10 +3119,7 @@ function checker(val) {
 ARS.registerChannel(DomIdentifier, [Element.prototype, Array.prototype, NodeList.prototype], checker);
 
 function registerComponent(name, func) {
-    ARS.registerChannelFunction(DomIdentifier, name, function(preCheck) {
-        checker = preCheck;
-        return func;
-    });
+    ARS.registerChannelFunction(DomIdentifier, name, func);
 }
 
 /*
