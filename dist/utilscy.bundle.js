@@ -31258,9 +31258,10 @@ var prepareRequest = function(url, method, async, data, type, callback, errback,
         }
         trace.unshift(C.getStackTrace());
 
-        function printTrace() {
+        function printTrace(e) {
             try {
-                C.printStackTrace(trace, undefined, true);
+                trace.unshift(e);
+                C.printStackTrace(undefined, trace, true);
             } catch (e) {
                 //ignore InformError
             }
@@ -31273,7 +31274,7 @@ var prepareRequest = function(url, method, async, data, type, callback, errback,
                 try {
                     func.apply(env, arguments);
                 } catch (e) {
-                    printTrace();
+                    printTrace(e);
                 }
                 C.__catching = __;
             };
