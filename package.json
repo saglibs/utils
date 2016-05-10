@@ -1,6 +1,6 @@
 {
   "name": "utils",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -23,7 +23,7 @@
     "coreutil": "saglibs/coreutil",
     "networkutil": "saglibs/networkutil",
     "domutil": "saglibs/domutil",
-    "cryptutil": "git+https://4d3c4b8558851ee489930acd2403ef38e597c412:x-oauth-basic@github.com/sagnitude/cryptutil.git"
+    "cryptutil": "sagnitude/cryptutil"
   },
   "devDependencies": {
     "browserify": "^13.0.0",
