@@ -3908,9 +3908,11 @@ C.getStackTrace = function(title) {
     if (split.length > 1) {
         var t = split[0];
         //remove getStackTrace itself
-        split.shift();
-        split.shift();
-        split.unshift(t);
+        if (t.indexOf("getStackTrace") !== -1) {
+            split.shift();
+            split.shift();
+            split.unshift(t);
+        }
         // split.unshift(callstack);
         return split.join('\n');
     }
