@@ -14,7 +14,31 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
+    <dependencies>
+        <dependency>
+            <groupId>com.sagnitude</groupId>
+            <artifactId>coreutil</artifactId>
+            <version>0.0-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <groupId>com.sagnitude</groupId>
+            <artifactId>networkutil</artifactId>
+            <version>0.0-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <groupId>com.sagnitude</groupId>
+            <artifactId>domutil</artifactId>
+            <version>0.0-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <groupId>com.sagnitude</groupId>
+            <artifactId>cryptutil</artifactId>
+            <version>0.0-SNAPSHOT</version>
+        </dependency>
+    </dependencies>
+
     <build>
+        <sourceDirectory>src/main/javascript</sourceDirectory>
         <resources>
             <resource>
                 <directory>src/main/javascript</directory>
