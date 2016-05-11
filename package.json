@@ -21,9 +21,9 @@
   "homepage": "https://github.com/saglibs/utils#readme",
   "dependencies": {
     "coreutil": "saglibs/coreutil",
-    "networkutil": "saglibs/networkutil",
+    "cryptutil": "sagnitude/cryptutil",
     "domutil": "saglibs/domutil",
-    "cryptutil": "sagnitude/cryptutil"
+    "networkutil": "saglibs/networkutil"
   },
   "devDependencies": {
     "browserify": "^13.0.1",
