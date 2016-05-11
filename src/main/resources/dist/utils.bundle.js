@@ -3,7 +3,7 @@ var DOM = require('domutil/dom');
 var H = require('coreutil/core');
 var N = require('networkutil/network');
 
-var C = require('./src/compatibility');
+var C = require('./src/main/javascript/compatibility');
 
 H.extend(H, DOM);
 H.extend(H, C);
@@ -13,7 +13,7 @@ H.root.H = H;
 H.root.N = N;
 
 module.exports = H;
-},{"./src/compatibility":43,"coreutil/core":2,"domutil/dom":23,"networkutil/network":40}],2:[function(require,module,exports){
+},{"./src/main/javascript/compatibility":43,"coreutil/core":2,"domutil/dom":23,"networkutil/network":40}],2:[function(require,module,exports){
 var Core = require('./src/core');
 
 Core.extend(Core, require('./src/iterator'));
