@@ -87,7 +87,8 @@
                             <goal>unpack-dependencies</goal>
                         </goals>
                         <configuration>
-                            <includeArtifactIds>com.sagnitude:coreutil</includeArtifactIds>
+                            <includeGroupIds>com.sagnitude</includeGroupIds>
+                            <includeArtifactIds>coreutil</includeArtifactIds>
                             <includes>**/*.*</includes>
                             <outputDirectory>${project.basedir}/node_modules/coreutil</outputDirectory>
                         </configuration>
@@ -99,7 +100,8 @@
                             <goal>unpack-dependencies</goal>
                         </goals>
                         <configuration>
-                            <includeArtifactIds>com.sagnitude:networkutil</includeArtifactIds>
+                            <includeGroupIds>com.sagnitude</includeGroupIds>
+                            <includeArtifactIds>networkutil</includeArtifactIds>
                             <includes>**/*.*</includes>
                             <outputDirectory>${project.basedir}/node_modules/networkutil</outputDirectory>
                         </configuration>
@@ -111,7 +113,8 @@
                             <goal>unpack-dependencies</goal>
                         </goals>
                         <configuration>
-                            <includeArtifactIds>com.sagnitude:domutil</includeArtifactIds>
+                            <includeGroupIds>com.sagnitude</includeGroupIds>
+                            <includeArtifactIds>domutil</includeArtifactIds>
                             <includes>**/*.*</includes>
                             <outputDirectory>${project.basedir}/node_modules/domutil</outputDirectory>
                         </configuration>
@@ -123,7 +126,8 @@
                             <goal>unpack-dependencies</goal>
                         </goals>
                         <configuration>
-                            <includeArtifactIds>com.sagnitude:cryptutil</includeArtifactIds>
+                            <includeGroupIds>com.sagnitude</includeGroupIds>
+                            <includeArtifactIds>cryptutil</includeArtifactIds>
                             <includes>**/*.*</includes>
                             <outputDirectory>${project.basedir}/node_modules/cryptutil</outputDirectory>
                         </configuration>

@@ -13,7 +13,7 @@ H.root.H = H;
 H.root.N = N;
 
 module.exports = H;
-},{"./src/compatibility":41,"coreutil/core":2,"domutil/dom":22,"networkutil/network":38}],2:[function(require,module,exports){
+},{"./src/compatibility":41,"coreutil/core":2,"domutil/dom":29,"networkutil/network":38}],2:[function(require,module,exports){
 var Core = require('./src/core');
 
 Core.extend(Core, require('./src/iterator'));
@@ -21,7 +21,7 @@ Core.extend(Core, require('./src/iterator'));
 Core.root[Core.__name] = Core;
 
 module.exports = Core;
-},{"./src/core":7,"./src/iterator":11}],3:[function(require,module,exports){
+},{"./src/core":14,"./src/iterator":18}],3:[function(require,module,exports){
 /*
  * MiniCore module
  *
@@ -79,4478 +79,6 @@ Mini.hiddenProperty = function(v) {
 
 module.exports = Mini;
 },{}],4:[function(require,module,exports){
-/*
- * ResultSet: Array or Element, they share the same filter/checker
- */
-
-/**
- * Abstract ResultSet Module
- *
- * @static
- * @memberof H
- * @type {Object}
- */
-var ARS = {};
-
-var Mini = require('../mini');
-var H = require('./shims');
-
-ARS.modules = {};
-ARS.checkTargets = {};
-ARS.checkers = {};
-
-var MODULE = '__Module__';
-
-/**
- * Register a ResultSet channel
- * @param {String} identifier ResultSet channel identifier
- * @param {Array} targets ResultSet element prototypes, should always contains Array.prototype
- * @param {Function} valuePrechecker value validity prechecker function
- */
-ARS.registerChannel = function(identifier, targets, valuePrechecker) {
-    ARS.modules[identifier] = {};
-    ARS.checkTargets[identifier] = targets;
-    ARS.checkers[identifier] = valuePrechecker;
-
-    Mini.arrayEach(targets || [], function(target) {
-        if (!target[MODULE]) {
-            H.addProperty(target, MODULE, Mini.hiddenProperty(MODULE));
-        }
-    });
-};
-
-/**
- * Register ResultSet process functions.
- *
- * @param {String} channel channel identifier
- * @param {String} name target function mount point
- * @param {Function} func Checker function. This provides ability of checking content validity to target functions.
- */
-ARS.registerChannelFunction = function(channel, name, func) {
-    /**
-     * To avoid lodash internal error. (on Object.prototype)
-     * (ResultSet member functions `filter`, `toArray` and so-on conflict with the lodash ver.)
-     * @type {*|_.noop}
-     */
-    func.push = H.noop;
-    Mini.arrayEach(ARS.checkTargets[channel] || [], function(target) {
-        if (!target[name]) {
-            H.addProperty(target, name, Mini.hiddenProperty(func));
-        }
-    });
-};
-
-/**
- * Wrapper function generator.
- *
- * @param {String} identifier channel identifier
- * @returns {wrap} wrapper function to wrap any value into specific ResultSet form
- */
-ARS.wrapperGen = function(identifier) {
-    //assuming prototype exists
-    function transform(obj) {
-        if (obj.prototype && obj.prototype.__Module__ && obj.prototype.__Module__ !== identifier) {
-            obj.prototype.__Module__ = identifier;
-        }
-        if (obj.__proto__ && obj.__proto__.__Module__ && obj.__proto__.__Module__ !== identifier) {
-            obj.__proto__.__Module__ = identifier;
-        }
-    }
-
-    function transformArray(obj) {
-        if (Mini.isArrayLike(obj) && typeof obj != 'string') {
-            Mini.arrayEach(obj, function(son) {
-                //if input is a string, will cause infinite loop
-                if (son !== obj || typeof obj !== 'object') {
-                    transformArray(son);
-                }
-            });
-        }
-        transform(obj, identifier);
-    }
-
-    /**
-     * Wrap an object to ResultSet
-     *
-     * @static
-     * @param {Array|Object} v anything to wrap
-     * @returns {*} wrapped ResultSet object
-     */
-    function wrap(v) {
-        transformArray(v);
-        return v;
-    }
-
-    return wrap;
-};
-
-module.exports = ARS;
-},{"../mini":3,"./shims":16}],5:[function(require,module,exports){
-var A = {};
-
-/**
- * Reads a 32bit integer from the specific offset in a Uint8Array (big or little endian)
- *
- * @static
- * @memberof H
- * @param {Uint8Array} byteView uint8array object
- * @param {Number} [offset] byte offset
- * @param {boolean} [littleEndian] flag of is or is not little endian
- * @returns {Number}
- * @example
- *
- * H.readInt32(uint8, 0, 1)
- */
-A.readInt32 = function(byteView, offset, littleEndian) {
-    var a0, a1, a2, a3;
-    a0 = byteView[offset];
-    a1 = byteView[offset + 1];
-    a2 = byteView[offset + 2];
-    a3 = byteView[offset + 3];
-    if (littleEndian) {
-        a3 = (a3 << 24) >>> 0;
-        a2 = a2 << 16;
-        a1 = a1 << 8;
-    } else {
-        a0 = (a0 << 24) >>> 0;
-        a1 = a1 << 16;
-        a2 = a2 << 8;
-    }
-    return a3 + a2 + a1 + a0;
-};
-
-/**
- * Reads a 16bit integer from the specific offset in a Uint8Array (big or little endian)
- *
- * @static
- * @memberof H
- * @param {Uint8Array} byteView uint8array object
- * @param {Number} [offset] byte offset
- * @param {boolean} [littleEndian] flag of is or is not little endian
- * @returns {Number}
- * @example
- *
- * H.readInt16(uint8, 0, 1)
- */
-A.readInt16 = function(byteView, offset, littleEndian) {
-    var a0, a1;
-    a0 = byteView[offset];
-    a1 = byteView[offset + 1];
-    if (littleEndian) {
-        a1 = a1 << 8;
-    } else {
-        a0 = a0 << 8
-    }
-    return a0 + a1;
-};
-
-var native = new Int8Array(new Int16Array([1]).buffer)[0] == 1;
-/**
- * Reads a 32bit float from the specific offset in a Uint8Array (big or little endian)
- *
- * @static
- * @memberof H
- * @param {Uint8Array} byteView uint8array object
- * @param {Number} [offset] byte offset
- * @param {boolean} [littleEndian] flag of is or is not little endian
- * @returns {Number}
- * @example
- *
- * H.readFloat32(uint8, 0, 1)
- */
-A.readFloat32 = function(byteView, offset, littleEndian) {
-    var b0, b1, b2, b3, tb1;
-    var sign, exponent, mantissa;
-    if (littleEndian === undefined) littleEndian = native;
-
-    if (littleEndian) {
-        b0 = byteView[offset + 3];
-        b1 = byteView[offset + 2];
-        b2 = byteView[offset + 1];
-        b3 = byteView[offset];
-    } else {
-        b0 = byteView[offset];
-        b1 = byteView[offset + 1];
-        b2 = byteView[offset + 2];
-        b3 = byteView[offset + 3];
-    }
-
-    //to prevent gc
-    tb1 = b0 >> 7;
-    sign = 1 - (2 * tb1);
-
-    b0 = b0 << 1;
-    tb1 = b1 >> 7;
-    b0 = (b0 & 0xff);
-    exponent = (b0 | tb1) - 127;
-
-    tb1 = b1 & 0x7f;
-    tb1 = tb1 << 16;
-    b2 = b2 << 8;
-    mantissa = tb1 | b2 | b3;
-
-    if (exponent === 128) {
-        if (mantissa !== 0) {
-            return NaN;
-        } else {
-            return sign * Infinity;
-        }
-    }
-
-    if (exponent === -127) { // Denormalized
-        return sign * mantissa * Math.pow(2, -126 - 23);
-    }
-
-    return sign * (1 + mantissa * Math.pow(2, -23)) * Math.pow(2, exponent);
-};
-
-module.exports = A;
-},{}],6:[function(require,module,exports){
-var C = require('./detect');
-
-/*
- * Cef Interactions
- */
-//noinspection JSUnresolvedVariable
-var cefQuery = C.root.cefQuery || function() {
-        if (this.debug) console.log(arguments[0]);
-    };
-
-/**
- * Call Cef
- *
- * @static
- * @memberof H
- * @param {string} [req] request string
- * @param {boolean} [persistent]
- * @param {Function} [onsuccess] success callback
- * @param {Function} [onfailure] failed callback
- * @returns {undefined}
- * @example
- *
- * H.callCef("selectItem:1", false, H.noop(), H.noop())
- */
-C.callCef = function(req, persistent, onsuccess, onfailure) {
-    return cefQuery({
-        request: req || "",
-        persistent: !!persistent,
-        onSuccess: onsuccess || function(response) {},
-        onFailure: onfailure || function(err_code, err_msg) {}
-    })
-};
-
-module.exports = C;
-},{"./detect":8}],7:[function(require,module,exports){
-var _ = require('lodash/core');
-
-require('./raf');
-
-var Detect = require('./detect');
-var StackTrace = require('./stacktrace');
-var ArrayBufferOp = require('./arraybuffer');
-var CefInteractions = require('./cef_interactions');
-var Maths = require('./math');
-var Objects = require('./object');
-var Storage = require('./storage');
-var Tester = require('./testers');
-var UrlUtils = require('./urlutils');
-var Uuids = require('./uuid');
-var Events = require('./event');
-// var Iterator = require('./iterator');
-var Shims = require('./shims');
-var ARS = require('./abstractresultset');
-var RS = require('./resultset');
-
-var C = {};
-
-C.__isRoot__ = true;
-
-_.extend(C, _);
-_.extend(C, Detect);
-_.extend(C, StackTrace);
-_.extend(C, ArrayBufferOp);
-_.extend(C, CefInteractions);
-_.extend(C, Maths);
-_.extend(C, Objects);
-_.extend(C, Storage);
-_.extend(C, Tester);
-_.extend(C, UrlUtils);
-_.extend(C, Uuids);
-_.extend(C, Events);
-// _.extend(C, Iterator);
-_.extend(C, Shims);
-_.extend(C, RS);
-
-C.abstraceResultSet = ARS;
-
-C.noop = function() {
-    return function() {};
-};
-
-C.now = Date.now;
-
-/*
- * jQuery Shim
- */
-//noinspection JSUnresolvedVariable
-if (C.root.jQuery) {
-    //noinspection JSUnresolvedVariable,JSUnusedGlobalSymbols
-    C.root.jQuery.fn.extend({
-        slideLeftHide: function( speed, callback ) {
-            //noinspection JSUnresolvedFunction
-            this.animate( {
-                width: "hide",
-                paddingLeft: "hide",
-                paddingRight: "hide",
-                marginLeft: "hide",
-                marginRight: "hide"
-            }, speed, callback);
-        },
-        slideLeftShow: function( speed, callback ) {
-            //noinspection JSUnresolvedFunction
-            this.animate( {
-                width: "show",
-                paddingLeft: "show",
-                paddingRight: "show",
-                marginLeft: "show",
-                marginRight: "show"
-            }, speed, callback);
-        }
-    });
-}
-
-//noinspection JSUnusedGlobalSymbols
-C.extend(String.prototype, {
-    replaceAll: function(s1,s2){
-        return this.replace(new RegExp(s1,"gm"),s2);
-    }
-});
-
-/**
- * Produce a random string in a fixed size. Output size is 16 by default.
- *
- * @static
- * @memberof H
- * @param {Number} [size] length of target string
- * @returns {string}
- */
-C.nonceStr = function(size) {
-    var s = "";
-    var c = "0123456789qwertyuiopasdfghjklzxcvbnm";
-    for (var i = 0; i < size || 16; i++) {
-        s += c[parseInt(36 * Math.random())];
-    }
-    return s;
-};
-
-/**
- * Clear timer
- *
- * @static
- * @memberof H
- * @param timer timer to clear
- */
-C.clearTimer = function(timer) {
-    if (timer) {
-        clearInterval(timer);
-    }
-};
-
-module.exports = C;
-},{"./abstractresultset":4,"./arraybuffer":5,"./cef_interactions":6,"./detect":8,"./event":10,"./math":12,"./object":13,"./raf":14,"./resultset":15,"./shims":16,"./stacktrace":17,"./storage":18,"./testers":19,"./urlutils":20,"./uuid":21,"lodash/core":33}],8:[function(require,module,exports){
-/*
- * Env Detection Module
- */
-
-var C = {};
-
-C.__isRoot__ = true;
-
-C.__name = '$H';
-
-C.isArrayLike = require('lodash/isArrayLike');
-
-/**
- * Check if a value can be parsed to an integer
- *
- * @static
- * @memberof H
- * @param {*} i value to be checked
- * @returns {boolean}
- */
-C.isInteger = function(i) {
-    return  /^-?\d+$/.test(i + "") || /^(-?\d+)e(\d+)$/.test(i + "");
-};
-
-/**
- * Checks if a value can be parsed into a float.
- *
- * @static
- * @memberof H
- * @param {*} v value to be checked
- * @returns {boolean}
- */
-C.isFloat = function(v) {
-    return /^(-?\d+)(\.\d+)?$/.test(v + "") || /^(-?\d+)(\.\d+)?e(-?\d+)$/.test(v + "");
-};
-
-var processObj = undefined;
-
-try {
-    processObj = eval('process');
-} catch (e) {}
-
-/**
- * Flag of is in node.js environment or not.
- *
- * @static
- * @memberof H
- * @type {boolean}
- */
-C.isNodejs = 'object' === typeof processObj && Object.prototype.toString.call(processObj) === '[object process]';
-
-C.root = {};
-
-try {
-    //noinspection JSUnresolvedVariable
-    C.root = GLOBAL;
-} catch (e) {
-    C.root = window;
-}
-
-C.root.__catching = false;
-
-C.__catching = false;
-
-//noinspection JSUnresolvedVariable
-// C.root = C.isNodejs ? GLOBAL : window;
-
-//noinspection JSUnresolvedVariable
-var root = C.root;
-
-//noinspection JSUnresolvedVariable
-root.navigator = root.navigator || {userAgent: ""};
-
-C.root = root;
-
-/**
- * Get IE version.
- * Returns 0 in non-IE environment.
- *
- * @static
- * @memberof H
- * @returns {number}
- */
-C.getIE = function() {
-    var MSIEs = navigator.userAgent.split('MSIE ')[1] || "0";
-    var DNETs = navigator.userAgent.split('rv:')[1] || "0";
-
-    MSIEs = MSIEs.split(".")[0];
-    DNETs = DNETs.split(".")[0];
-
-    var msie = ~~MSIEs;
-    var dnet = ~~DNETs;
-
-    if (msie != 0) {
-        return msie;
-    }
-    if (dnet != 0) {
-        return dnet;
-    }
-
-    return 0;
-};
-
-/**
- * Check if is in IE or is in a specified version of IE.
- *
- * @static
- * @memberof H
- * @param {Number} [v] version to check
- * @returns {boolean}
- */
-C.isIE = function(v) {
-    if (v !== undefined) {
-        return C.getIE() == v;
-    } else {
-        return C.getIE() !== 0;
-    }
-};
-
-/**
- * Flag of is in IE.
- *
- * @static
- * @memberof H
- * @type {boolean}
- */
-C.likeIE = !!C.getIE();
-
-/**
- * Flag of is in browsers on iPhone.
- *
- * @static
- * @memberof H
- * @type {boolean}
- */
-C.isiPhone = navigator.userAgent.indexOf('iPhone') !== -1;
-
-/**
- * Flag of is in browsers of Lollipop systems
- * @type {boolean}
- */
-C.isLollipop = navigator.userAgent.indexOf('Android 5.') !== -1;
-
-//root.hasOwnProperty shims
-if (!root.hasOwnProperty) {
-    root.hasOwnProperty = function(p) {
-        //Note: in IE<9, p cannot be a function (for window)
-        return !!root[p];
-    };
-}
-
-/**
- * Check if canvas drawing is supported in current browser.
- *
- * @static
- * @memberof H
- * @returns {boolean}
- */
-C.isCanvasSupported = function () {
-    if (C.isNodejs) return false;
-    var canvas = document.createElement('canvas');
-    return root.hasOwnProperty("__cv") ? root.__cv : root.__cv = !!(canvas.getContext && canvas.getContext('2d'));
-};
-
-/**
- * Check if webgl drawing is supported in current browser.
- *
- * @static
- * @memberof H
- * @returns {boolean}
- */
-C.isWebGLSupported = function () {
-    if (C.isNodejs) return false;
-    var canvas = document.createElement('canvas');
-    return root.hasOwnProperty("__gl") ? root.__gl : root.__gl = !!(root['WebGLRenderingContext'] && canvas.getContext('webgl'));
-};
-
-// C.isCanvasSupported();
-// C.isWebGLSupported();
-
-/**
- * Language string
- *
- * @static
- * @memberof H
- * @type {string}
- */
-C.language = C.isNodejs ? "" : (navigator.language || navigator['browserLanguage'] || "").toLowerCase();
-
-module.exports = C;
-},{"lodash/isArrayLike":34}],9:[function(require,module,exports){
-/*
- * String Encoding
- * Binary Operation
- * String Convertion
- */
-var ES = {};
-
-/*
- * Possible input
- *
- * 1 ArrayBuffer of raw data bytes
- * 2 Array of raw data bytes
- * 3 Array of char codes (UTF-16)
- * 4 Raw data string
- * 5 Unicode String
- *
- * Possible output
- *
- * 1 ArrayBuffer of raw data bytes
- * 2 Array of raw data bytes
- * 3 Array of char codes (UTF-16)
- * 4 String of raw data
- * 5 Unicode String
- */
-
-var B10000000 = 0x80;
-var B11000000 = 0xC0;
-var B11100000 = 0xE0;
-var B11110000 = 0xF0;
-var B11111000 = 0xF8;
-var B11111100 = 0xFC;
-//noinspection JSUnusedLocalSymbols
-var B11111110 = 0xFE;
-var B00000001 = 0x01;
-var B00000011 = 0x03;
-var B00000111 = 0x07;
-var B00001111 = 0x0F;
-var B00011111 = 0x1F;
-var B00111111 = 0x3F;
-//noinspection JSUnusedLocalSymbols
-var B01111111 = 0x7F;
-var B11111111 = 0xFF;
-
-/*
- * Used for ArrayBuffer extension
- */
-//function allocByteArray(length, isBuffer) {
-//    if (isBuffer) {
-//        return new Int8Array(length);
-//    } else {
-//        return new Array(length);
-//    }
-//}
-//
-//function allocIntArray(length, isBuffer) {
-//    if (isBuffer) {
-//        return new Int32Array(length);
-//    } else {
-//        return new Array(length);
-//    }
-//}
-
-/**
- * Unicode Int Array -> Unicode String
- *
- * @static
- * @memberof H
- * @param {Array|ArrayBuffer|Uint8Array} ar unicode int array or arraybuffer
- * @returns {string} unicode string
- */
-function unicodeIntArrayToString(ar) {
-    if (ar instanceof ArrayBuffer) {
-        ar = new Uint8Array(ar);
-    }
-    var result = "";
-    var l = ar.byteLength || ar.length;
-    var length = ar.byteLength || ar.length;
-    for (l += 1; --l;) {
-        result += String.fromCharCode(ar[length - l]);
-    }
-    return result;
-}
-
-/**
- * Unicode String -> Unicode Int Array
- *
- * @static
- * @memberof H
- * @param {String} str unicode string (including ascii string)
- * @returns {Array} unicode int array
- */
-function stringToUnicodeIntArray(str) {
-    var length = str.length;
-    var result = new Array(length);
-    for (length += 1; --length;) {
-        result[length - 1] = str.charCodeAt(length - 1);
-    }
-    return result;
-}
-
-/**
- * Utf16 String -> Byte Array (represented in UTF-8)
- *
- * @static
- * @memberof H
- * @param {String} str unicode string
- * @returns {Array} utf-8 byte array
- */
-function stringToUtf8ByteArray(str) {
-    var out = [], l = str.length;
-    var n = str.length;
-    for (l++; --l;) {
-        var i = n - l;
-        var c = str.charCodeAt(i);
-        if (c < 0x80) {
-            out[out.length] = c;
-        } else if (c < 0x800) {
-            out[out.length] = 0xc0 | (c >> 6);
-            out[out.length] = 0x80 | (c & 0x3f);
-        } else if (c < 0xd800 || c >= 0xe000) {
-            out[out.length] = 0xe0 | (c >> 12);
-            out[out.length] = 0x80 | ((c >> 6) & 0x3f);
-            out[out.length] = 0x80 | (c & 0x3f);
-        } else {
-            // surrogate pair
-            --l;
-            // UTF-16 encodes 0x10000-0x10FFFF by
-            // subtracting 0x10000 and splitting the
-            // 20 bits of 0x0-0xFFFFF into two halves
-            c = 0x10000 + (((c & 0x3ff) << 10)
-                | (str.charCodeAt(i) & 0x3ff));
-            out[out.length] = 0xf0 | (c >> 18);
-            out[out.length] = 0x80 | ((c >> 12) & 0x3f);
-            out[out.length] = 0x80 | ((c >> 6) & 0x3f);
-            out[out.length] = 0x80 | (c & 0x3f);
-        }
-    }
-    return out;
-}
-
-/**
- * Utf16 String -> ArrayBuffer (Uint8Array) representing UTF-8
- *
- * @static
- * @memberof H
- * @param {String} str utf-16 string
- * @return {Uint8Array} utf-8 arraybuffer
- */
-function stringToArrayBuffer(str) {
-    var byteLength = str.length * 3;
-    var isString = typeof str == 'string';
-    var out = new Uint8Array(byteLength);
-    var pc = 0;
-    for (var i = 0; i < str.length; i++) {
-        var c = isString ? str.charCodeAt(i) : str[i];
-        if (c < 0x80) {
-            out[out.length] = c;
-            pc++;
-        } else if (c < 0x800) {
-            out[out.length] = 0xc0 | (c >> 6);
-            out[out.length] = 0x80 | (c & 0x3f);
-            pc += 2;
-        } else if (c < 0xd800 || c >= 0xe000) {
-            out[out.length] = 0xe0 | (c >> 12);
-            out[out.length] = 0x80 | ((c >> 6) & 0x3f);
-            out[out.length] = 0x80 | (c & 0x3f);
-            pc += 3;
-        } else {
-            // surrogate pair
-            --l;
-            // UTF-16 encodes 0x10000-0x10FFFF by
-            // subtracting 0x10000 and splitting the
-            // 20 bits of 0x0-0xFFFFF into two halves
-            c = 0x10000 + (((c & 0x3ff)<<10) | (c & 0x3ff));
-            out[out.length] = 0xf0 | (c >> 18);
-            out[out.length] = 0x80 | ((c >> 12) & 0x3f);
-            out[out.length] = 0x80 | ((c >> 6) & 0x3f);
-            out[out.length] = 0x80 | (c & 0x3f);
-            pc += 4;
-        }
-    }
-    if (ArrayBuffer.prototype.slice) {
-        return out.slice(0, pc);
-    } else {
-        var output = new Uint8Array(pc);
-        for (var j = 0; j < pc; j++) {
-            output[j] = out[j];
-        }
-        return output;
-    }
-}
-
-/**
- * Utf16 Array -> ArrayBuffer (Uint8Array) (in UTF-8)
- * @type {stringToArrayBuffer}
- */
-var utf16ArrayToArrayBuffer = stringToArrayBuffer;
-
-/**
- * Byte Array (UTF-8) -> Unicode String
- * Uint8Array (UTF-8) -> Unicode String **bug here**
- *
- * @static
- * @memberof H
- * @param {Array|ArrayBuffer|Uint8Array} data byte array or uint8array in UTF-8 encoding
- * @returns {string} unicode string
- */
-function utf8ByteArrayToUnicodeString(data) { // array of bytes
-    if (data instanceof ArrayBuffer) {
-        data = new Uint8Array(data);
-    }
-    var str = '',
-        i, l = data.byteLength || data.length, s = data.byteLength || data.length;
-
-    for (l++; --l;) {
-        i = s - l;
-        if (l < 0) break;
-        var value = data[i];
-
-        //accept Unicode char code also
-        if (value < 0x80 || value > 0xFF) {
-            str += String.fromCharCode(value);
-        } else if (value > 0xBF && value < 0xE0) {
-            str += String.fromCharCode((value & 0x1F) << 6 | data[i + 1] & 0x3F);
-            --l;
-        } else if (value > 0xDF && value < 0xF0) {
-            str += String.fromCharCode((value & 0x0F) << 12 | (data[i + 1] & 0x3F) << 6 | data[i + 2] & 0x3F);
-            l -= 2;
-        } else if (value < 0x100) {
-            // surrogate pair
-            var charCode = ((value & 0x07) << 18 | (data[i + 1] & 0x3F) << 12 | (data[i + 2] & 0x3F) << 6 | data[i + 3] & 0x3F) - 0x010000;
-
-            str += String.fromCharCode(charCode >> 10 | 0xD800, charCode & 0x03FF | 0xDC00);
-            l -= 3;
-        }
-    }
-
-    return str;
-}
-
-/**
- * Byte Array (UTF-8 representation) -> Int Array (UTF-16 representation)
- * Uint8Array (UTF-8 representation) -> Int Array (UTF-16 representation)
- *
- * @static
- * @memberof H
- * @param {Array|Uint8Array|ArrayBuffer} arr byte array in UTF-8 encoding
- * @return {Array} utf-16 int array
- */
-function byteArrayToUtf16Array(arr) {
-    var used = 0;
-    var l;
-    var length = l = (arr.byteLength || arr.length), i, t, byteCount, rev;
-    for (l += 1;--l;) {
-        rev = 0;
-        i = length - l;
-        t = arr[i];
-        if (t < B10000000) {
-            byteCount = 0;
-            rev = B11111111;
-        } else if (t < B11000000) {
-            //will not happen
-            byteCount = 0;
-            rev = B11111111;
-        } else if (t < B11100000) {
-            //U-00000080 - U-000007FF: 110xxxxx 10xxxxxx
-            byteCount = 1;
-            rev = B00011111;
-        } else if (t < B11110000) {
-            //U-00000800 - U-0000FFFF: 1110xxxx 10xxxxxx 10xxxxxx
-            byteCount = 2;
-            rev = B00001111;
-        } else if (t < B11111000) {
-            //U-00010000 - U-001FFFFF: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
-            byteCount = 3;
-            rev = B00000111;
-        }
-        //NOTE: 4 and 5 are not safe, cuz `<<` operation is over 32bit (int)
-        //NOTE: javascript byte operations use int(32bit)
-        else if (t < B11111100) {
-            //U-00200000 - U-03FFFFFF: 111110xx 10xxxxxx 10xxxxxx 10xxxxxx 10xxxxxx
-            byteCount = 4;
-            rev = B00000011;
-        } else {
-            //U-04000000 - U-7FFFFFFF: 1111110x 10xxxxxx 10xxxxxx 10xxxxxx 10xxxxxx 10xxxxxx
-            byteCount = 5;
-            rev = B00000001;
-        }
-
-        var allc = byteCount;
-        var result = 0;
-        if (byteCount) {
-            for (byteCount += 1; --byteCount;) {
-                //byteCount: bc -> 1
-                result += ((arr[i + byteCount] & B00111111) << (6 * (allc - byteCount)));
-            }
-        }
-        result |= (t & rev) << (allc * 6);
-        arr[used++] = result;
-        l -= allc;
-        if (l <= 0) {
-            break;
-        }
-    }
-    arr.length = used;
-    return arr;
-}
-
-/**
- * UTF-16 Int Array -> Byte Array (representing UTF-8 chars)
- *
- * @static
- * @memberof H
- * @param {Array} ia utf-16 int array
- * @returns {Array} utf-8 byte array
- */
-function utf16ArrayToByteArray(ia) {
-    var out = [];
-    for (var i = 0; i < ia.length; i++) {
-        var c = ia[i];
-        if (c < 0x80) {
-            out[out.length] = c;
-        } else if (c < 0x800) {
-            out[out.length] = 0xc0 | (c >> 6);
-            out[out.length] = 0x80 | (c & 0x3f);
-        } else if (c < 0xd800 || c >= 0xe000) {
-            out[out.length] = 0xe0 | (c >> 12);
-            out[out.length] = 0x80 | ((c >> 6) & 0x3f);
-            out[out.length] = 0x80 | (c & 0x3f);
-        } else {
-            // surrogate pair
-            // UTF-16 encodes 0x10000-0x10FFFF by
-            // subtracting 0x10000 and splitting the
-            // 20 bits of 0x0-0xFFFFF into two halves
-            c = 0x10000 + (((c & 0x3ff) << 10)
-                | (ia[i] & 0x3ff));
-            out[out.length] = 0xf0 | (c >> 18);
-            out[out.length] = 0x80 | ((c >> 12) & 0x3f);
-            out[out.length] = 0x80 | ((c >> 6) & 0x3f);
-            out[out.length] = 0x80 | (c & 0x3f);
-            i++;
-        }
-    }
-    return out;
-}
-
-/**
- * ASCII String of UTF-8 Byte Array -> Unicode String
- *
- * @static
- * @memberof H
- * @param {String} str ascii string of utf-8 byte array
- * @returns {string} unicode string in utf-16 encoding
- */
-function utf8ByteStringToUnicodeString(str) {
-    //bs -> ba
-    //ba -> us
-    return utf8ByteArrayToUnicodeString(stringToUnicodeIntArray(str));
-}
-
-/**
- * Unicode String -> ASCII String of UTF-8 Byte Array
- *
- * @static
- * @memberof H
- * @param {String} str unicode string
- * @return {String} ascii string of utf-8 encoded byte array
- */
-function unicodeStringToUtf8ByteString(str) {
-    //us -> ba
-    //ba -> s
-    return unicodeIntArrayToString(stringToUtf8ByteArray(str));
-}
-
-/**
- * Raw String (UTF-8 Bytes) -> Uint8Array
- * no validality check
- *
- * @static
- * @memberof H
- * @param {String} str ascii string in utf-8 encoding
- * @return {Uint8Array} result arraybuffer
- */
-function utf8ByteStringToUint8Array(str) {
-    var length = str.length;
-    var out = new Uint8Array(length);
-    for (var i = 0; i < length; i++) {
-        out[i] = str.charCodeAt(i);
-    }
-    return out;
-}
-
-/*
- * `Binary String` is the binary representation of a number
- */
-
-/**
- * Decimal String -> Binary String
- *
- * @static
- * @memberof H
- * @param {String} d string of decimal number
- * @returns {string} string of binary representation of the specific number
- */
-function numberToBinaryString(d) {
-    return Number(d).toString(2);
-}
-
-//noinspection JSUnusedLocalSymbols
-/**
- * String (might be byte string) -> Unicode string
- * but much (1x) slower than E.ba2s(E.s2a())
- *
- * @private
- * @deprecated
- * @param {String} str unicode string
- * @returns {string} utf8 string
- */
-function strintToUtf8String(str) {
-    //noinspection JSDeprecatedSymbols
-    return decodeURIComponent(escape(str));
-}
-
-function hex(i) {
-    if (!i) return "??";
-    return ("00" + (i & 0xff).toString(16)).slice(-2);
-}
-
-/**
- * Get a well-printed JSON string
- *
- * @static
- * @memberof H
- * @param {Object} jsonObject json object to encode
- */
-ES.getPrettyJson = function(jsonObject) {
-    return JSON.stringify(jsonObject, null, "\t");
-};
-
-/**
- * Alias of H.numberToBinaryString
- *
- * @static
- * @memberof H
- * @type {H.numberToBinaryString}
- */
-ES.n2bin = numberToBinaryString;
-/**
- * Get the hex representation string of a number (less than 256/0xFF)
- *
- * @static
- * @memberof H
- * @param {Number} i
- * @returns {String} hex string
- */
-ES.hex = hex;
-
-//3-5, 5-3; 3-4, 4-3; 1-4
-//Array of charcode <-> Unicode String
-/**
- * ArrayBuffer to ByteString
- * UnicodeIntArray to UnicodeString
- *
- * @static
- * @memberof H
- * @type {H.unicodeIntArrayToString}
- */
-ES.ab2bs = ES.ua2s = unicodeIntArrayToString;
-/**
- * UnicodeString to UnicodeIntArray
- *
- * @static
- * @memberof H
- * @type {H.stringToUnicodeIntArray}
- */
-ES.s2ua = stringToUnicodeIntArray;
-
-//4-5, 5-4
-//Raw data string <-> Unicode String
-/**
- * UnicodeString to AsciiByteString
- *
- * @static
- * @memberof H
- * @type {H.unicodeStringToUtf8ByteString}
- */
-ES.us2bs = unicodeStringToUtf8ByteString;
-/**
- * Utf-8 ByteString to UnicodeString
- * @type {H.utf8ByteStringToUnicodeString}
- */
-ES.bs2us = utf8ByteStringToUnicodeString;
-
-//2-5, 5-2; 2-4, 4-2; ?, 1-5
-//Unicode String <-> Array of raw data bytes
-/**
- * Unicode String to ByteArray
- *
- * @static
- * @memberof H
- * @type {H.stringToUtf8ByteArray}
- */
-ES.s2ba = stringToUtf8ByteArray; //str to binary arr (utf8)
-/**
- * ByteArray to UnicodeString
- * ArrayBuffer to UnicodeString
- *
- * @static
- * @memberof H
- * @type {H.utf8ByteArrayToUnicodeString}
- */
-ES.ab2s = ES.ba2s = utf8ByteArrayToUnicodeString; //binary arr (utf8) to str
-
-//2-3, 3-2; 1-3
-/**
- * ByteArray to Utf16IntArray
- *
- * @static
- * @memberof H
- * @type {H.byteArrayToUtf16Array}
- */
-ES.ba2ia = byteArrayToUtf16Array; //binary array to int array
-/**
- * Utf16IntArray to ByteArray
- *
- * @static
- * @memberof H
- * @type {H.utf16ArrayToByteArray}
- */
-ES.ia2ba = utf16ArrayToByteArray;
-
-//meaningless: 1-2, 2-1
-
-//4-1
-/**
- * AsciiByteString to ArrayBuffer
- *
- * @static
- * @memberof H
- * @type {H.utf8ByteStringToUint8Array}
- */
-ES.bs2ab = utf8ByteStringToUint8Array;
-//5-1
-/**
- * UnicodeString to ArrayBuffer(Uint8Array)
- *
- * @static
- * @memberof H
- * @type {H.stringToArrayBuffer}
- */
-ES.s2ab = stringToArrayBuffer;
-//3-1
-/**
- * IntArray to ArrayBuffer
- *
- * @static
- * @memberof H
- * @type {stringToArrayBuffer}
- */
-ES.a2ab = utf16ArrayToArrayBuffer;
-
-//aliases
-/**
- * Unicode CharArray to String, alias of H.ua2s
- *
- * @static
- * @memberof H
- * @type {*|unicodeIntArrayToString}
- */
-ES.a2s = ES.ua2s; //unicode char array to str
-/**
- * UnicodeString to UnicodeIntArray
- *
- * @static
- * @memberof H
- * @type {*|stringToUnicodeIntArray}
- */
-ES.s2a = ES.s2ua; //str to unicode char array
-
-/**
- * ByteArray to UnicodeIntArray, alias of E.ba2ia
- * @type {*|byteArrayToUtf16Array}
- */
-ES.ba2ua = ES.ba2ia; //alias
-
-/**
- * String to UnicodeString
- *
- * @static
- * @memberof H|E
- * @type {H.utf8ByteStringToUnicodeString}
- */
-ES.s2us = ES.bs2us;
-
-module.exports = ES;
-},{}],10:[function(require,module,exports){
-/*
- * Custom Event Manipulation Module
- */
-
-var E = {};
-
-var H = require('./uuid');
-var C = require('./iterator');
-
-/**
- * DOM event operators.
- *
- * @static
- * @memberof H
- * @type {{addHandler: E.Event.addHandler, removeHandler: E.Event.removeHandler}}
- */
-E.Event = {
-    /**
-     * Add event handler
-     *
-     * @static
-     * @memberof H.Event
-     * @param {Element} oElement DOM element
-     * @param {String} sEvent event name
-     * @param {Function} fnHandler event handler
-     */
-    addHandler: function (oElement, sEvent, fnHandler) {
-        sEvent[0] = sEvent[0].toUpperCase();
-        oElement.addEventListener ? oElement.addEventListener(sEvent, fnHandler, false) : oElement.attachEvent("on" + sEvent, fnHandler)
-    },
-    /**
-     * Remove event handler from dom element
-     *
-     * @static
-     * @memberof H.Event
-     * @param {Element} oElement DOM element
-     * @param {String} sEvent event name
-     * @param {Function} fnHandler event handler
-     */
-    removeHandler: function (oElement, sEvent, fnHandler) {
-        sEvent[0] = sEvent[0].toUpperCase();
-        oElement.removeEventListener ? oElement.removeEventListener(sEvent, fnHandler, false) : oElement.detachEvent("on" + sEvent, fnHandler);
-        sEvent[0] = sEvent[0].toLowerCase();
-        oElement.removeEventListener ? oElement.removeEventListener(sEvent, fnHandler, false) : oElement.detachEvent("on" + sEvent, fnHandler);
-    }
-};
-
-/**
- * EventDispatcher
- *
- * @static
- * @memberof H
- * @returns {{listeners: {}, attachListener: H.EventDispatcher.attachListener, fire: H.EventDispatcher.fire, removeListener: H.EventDispatcher.removeListener, clearListener: H.EventDispatcher.clearListener}}
- * @constructor
- */
-E.EventDispatcher = function() {
-    return {
-        listeners: {},
-        /**
-         * Attach an listener listening on a channel
-         *
-         * @static
-         * @memberof H.EventDispatcher
-         * @param {String} key channel to listen
-         * @param {Function} cb listener body
-         * @returns {String} UUID String, listener identifier
-         */
-        attachListener: function(key, cb) {
-            this.listeners[key] = this.listeners[key] || {};
-            //noinspection JSUnresolvedVariable
-            cb.uuid = cb.uuid || H.fastUuid();
-            //noinspection JSUnresolvedVariable
-            this.listeners[key][cb.uuid] = cb;
-            //noinspection JSUnresolvedVariable
-            return cb.uuid;
-        },
-        /**
-         * Fire event at a channel now
-         *
-         * @static
-         * @memberof H.EventDispatcher
-         * @param {String} key event channel key to fire
-         * @param {*} [data] optional data to append
-         */
-        fire: function(key, data) {
-            if (this.listeners[key]) {
-                C.each(this.listeners[key], function(cb) {
-                    //noinspection JSUnresolvedVariable
-                    if (cb && typeof cb === 'function' && !cb.blocked) {
-                        try {
-                            cb(data);
-                        }catch(e) {
-                            console.log(e)
-                        }
-                    }
-                });
-            }
-        },
-        /**
-         * Remove a listener from a channel.
-         *
-         * @static
-         * @memberof H.EventDispatcher
-         * @param {String} key channel name
-         * @param {Function} func listener body
-         */
-        removeListener: function(key, func) {
-            if (this.listeners[key]) {
-                this.listeners[key] = C.each(this.listeners[key], function(listener) {
-                    //noinspection JSUnresolvedVariable
-                    if (listener.uuid !== func.uuid) return listener;
-                }).merge();
-            }
-        },
-        /**
-         * Clear all listeners on a channel
-         *
-         * @static
-         * @memberof H.EventDispatcher
-         * @param {String} key channel key to clear
-         */
-        clearListener: function(key) {
-            this.listeners[key] = undefined;
-            delete this.listeners[key];
-        }
-    };
-};
-
-module.exports = E;
-},{"./iterator":11,"./uuid":21}],11:[function(require,module,exports){
-/*
- * Iterator Logic Module
- */
-var C = require('lodash/core');
-var Mini = require('../mini');
-var E = require('./stacktrace');
-var D = require('./detect');
-
-var I = function(template) {
-    I.template = template || I.resultWrapper;
-    return I;
-};
-
-/**
- * Set the default result template.
- * A result template will be used to produce a result object according to the input value.
- *
- * @static
- * @param {Function} template
- * @returns {I}
- * @constructor
- */
-I.setTemplate = function(template) {
-    I.template = template || I.resultWrapper;
-    return I;
-};
-
-/*
- * @private
- *
- * returns a template object for the input value
- */
-I.resultWrapper = function(v) {
-    if (I.template !== undefined) return I.template(v);
-    return (v === undefined || v === null) ? {} : (Mini.isArrayLike(v) ? [] : {});
-};
-
-/**
- * Iterates an object or an array with an iteratee and a stack of stack trace
- *
- * @static
- * @memberof H
- * @param {Array|Object} obj
- * @param {Function} fn
- * @param {Array|String} [stackStack]
- * @return {Array|Object} return mapped results of the input object
- */
-I.each = function(obj, fn, stackStack) {
-    stackStack = stackStack || [];
-    if (typeof stackStack == 'string' || !Mini.isArrayLike(stackStack)) {
-        stackStack = [stackStack];
-    }
-    stackStack.unshift(E.getStackTrace());
-    var ret = I.resultWrapper(obj);
-    if (D.root[D.__name].debug) {
-        var print = false;
-        C.each(obj, function(val, key, list) {
-            try {
-                var r = fn(val, key, list);
-                if (r) ret[key] = r;
-            } catch (e) {
-                //E.printStackTrace only accepts one parameter
-                if (!print) {
-                    e.printStackTrace(stackStack);
-                    print = true;
-                }
-            }
-        });
-    } else {
-        C.each(obj, function(val, key, list) {
-            var r = fn(val, key, list);
-            if (r) ret[key] = r;
-        });
-    }
-    return ret;
-};
-
-/**
- * Just iterate the input object
- * @type {function((Array|Object), Function=): (Array|Object)}
- */
-I.every = C.each;
-
-/**
- * Iterator function with early quit.
- *
- * @static
- * @memberof H
- * @param {Array|Object} data data to iterate
- * @param {Function} fn function to yield result of each input
- * @param {Function} callable function to check if the itearting should be terminated
- * @param {Array} [stackStack] stack trace stack
- */
-I.until = function(data, fn, callable, stackStack) {
-    stackStack = stackStack || [];
-    if (typeof stackStack == 'string' || !Mini.isArrayLike(stackStack)) {
-        stackStack = [stackStack];
-    }
-    stackStack.unshift(E.getStackTrace());
-    var ret = I.resultWrapper(data);
-    //TODO: does it work? (not including `core` module here due to dependency error)
-    //TODO: remove dependency on static named variable `H`
-    if (D.root[D.__name].debug) {
-        var print = false;
-        C.find(data, function(val, key, list) {
-            try {
-                var r = fn(val, key, list);
-                if (r) ret[key] = r;
-                return callable(val, key, list);
-            } catch (e) {
-                if (!print) {
-                    e.printStackTrace(stackStack);
-                    print = true;
-                }
-            }
-        });
-    } else {
-        C.find(data, function(val, key, list) {
-            var r = fn(val, key, list);
-            if (r) ret[key] = r;
-            return callable(val, key, list);
-        });
-    }
-    return ret;
-};
-
-/**
- * Iterate all keys on the object. (indices on arrays)
- * Would prefer H.each(H.keys())
- *
- * @static
- * @memberof H
- * @param {Array|Object} data data to iterate
- * @param {Function} callable iteratee to yield result
- */
-I.eachKey = function(data, callable) {
-    var keys = data;
-    if (!Mini.isArrayLike(data)) {
-        keys = C.keys(data);
-    }
-    var l = keys.length;
-    var n = keys.length;
-    for (l++; --l;) {
-        callable(n - l, keys[n - l], data);
-    }
-};
-
-/**
- * Iterate on a range of numbers.
- *
- * @static
- * @memberof H
- * @return {Array|Object}
- * @example
- *
- * H.eachIndex(4, function() {}) => 4x undefined
- * H.eachIndex(1, 4, function() {}) => 3x undefined
- * H.eachIndex(2, 4, 2, function() {}) => 1x undefined
- */
-I.eachIndex = function() {
-    var length = arguments.length;
-    //accept 2-4 arguments only.
-    if (length < 2 || length > 4) {
-        return;
-    }
-    var start = length > 2 ? arguments[0] : 0;
-    var end = length === 2 ? arguments[0] : arguments[1];
-    var step = length >= 4 ? arguments[2] : 1;
-    var iteratee = arguments[length - 1];
-
-    //end, iteratee
-    //start, end, iteratee
-    //start, end, step, iteratee
-    var rs = I.resultWrapper([]);
-    var i = 0;
-
-    if (step === 1) {
-        //short for is faster than dowhile
-        var ci = start;
-        for (i = end - start + 1; --i;) {
-            rs[ci] = iteratee(ci, ci);
-            ci++;
-        }
-        return rs;
-    } else {
-        do {
-            rs[start] = iteratee(start, i++);
-
-            start += step;
-        } while (start <= end);
-        return rs;
-    }
-};
-
-/**
- * Iterator discarding values.
- *
- * @param {Array|Object|Function} ele object to iterate
- * @param {Function} fn iteratee to produce values
- */
-I.filter = function(ele, fn) {
-    if (fn === undefined) {
-        fn = ele;
-        ele = this;
-    }
-    return I.each(ele, function(o) {
-        if (fn(o)) {
-            return o;
-        }
-    });
-};
-
-module.exports = I;
-},{"../mini":3,"./detect":8,"./stacktrace":17,"lodash/core":33}],12:[function(require,module,exports){
-/*
- * Math-Related Module
- */
-
-var Ms = {};
-var C = require('../mini');
-var H = require('./stacktrace');
-
-/**
- * Sum a list of number
- *
- * @static
- * @memberof H
- * @param {Array} list
- * @returns {number}
- */
-Ms.sum = function(list) {
-    if (!C.isArrayLike(list)) return 0;
-    var sum = 0;
-    var length = list.length;
-    length++;
-    while(--length) {
-        sum += list[length - 1];
-    }
-    if (isNaN(sum)) {
-        H.printStackTrace("NaN!");
-        return 0;
-    }
-    return sum;
-};
-
-/**
- * Hypot polyfill.
- *
- * @static
- * @memberof H
- * @type {Function}
- */
-Ms.hypot = Math.hypot || function() {
-        return Math.sqrt(Ms.sum(C.arrayEach(arguments, function(arg) {
-            return arg * arg;
-        })));
-    };
-
-/**
- * Log2 polyfill
- *
- * @static
- * @memberof H
- * @type {Function}
- */
-Ms.log2 = Math.log2 || function(number) {
-        return Math.log(number) / Math.log(2);
-    };
-
-/**
- * Check if a variable between given two numbers
- *
- * @static
- * @memberof H
- * @param {Number} v number to check
- * @param {Number} v0 margin 1
- * @param {Number} v1 margin 2
- * @returns {boolean}
- */
-Ms.varInRange = function(v, v0, v1) {
-    return (v - v0) * (v - v1) < 0;
-};
-
-/**
- * Check if a point [x, y] is inside the rectangle of two given points.
- *
- * @static
- * @memberof H
- * @param {Object} p point to check
- * @param {Object} p0 point 1
- * @param {Object} p1 point 2
- * @returns {boolean}
- */
-Ms.pointInRect = function(p, p0, p1) {
-    var result = true;
-    C.arrayEach(p, function(ele, index) {
-        result &= Ms.varInRange(ele, p0[index], p1[index]);
-    });
-    return result;
-};
-
-/**
- * Extract max value. Object not supported
- *
- * @static
- * @memberof H
- * @param list
- * @returns {number}
- */
-Ms.max = function(list) {
-    var mx = -Infinity;
-    C.arrayEach(list, function(v) {
-        if (v > mx) mx = v;
-    });
-    return mx;
-};
-
-/**
- * Extract min value. Object not supported
- *
- * @static
- * @memberof H
- * @param list
- * @returns {number}
- */
-Ms.min = function(list) {
-    var mx = Infinity;
-    C.arrayEach(list, function(v) {
-        if (v < mx) mx = v;
-    });
-    return mx;
-};
-
-//dependes on `keys` and `values`
-// Ms.maxValue = function(obj) {
-//     return Ms.max(C.values(obj));
-// };
-//
-// Ms.minValue = function(obj) {
-//     return Ms.min(C.values(obj));
-// };
-
-/*
- * Individual Functions
- */
-
-/**
- * Degree to radian
- *
- * @static
- * @memberof H
- * @param {Number} degree degree value
- * @returns {number} radian value
- */
-Ms.degToRad = function(degree) {
-    return (degree / 180.0) * Math.PI;
-};
-
-/**
- * Radian to degree
- *
- * @static
- * @memberof H
- * @param {Number} rad radian value
- * @returns {number} degree value
- */
-Ms.radToDeg = function(rad) {
-    return rad * 180.0 / Math.PI;
-};
-
-/**
- * Normalize degree value to [0, 360)
- *
- * @static
- * @memberof H
- * @param {Number} degree degree value
- * @returns {number} normalized degree value
- */
-Ms.standardizeDegree = function(degree) {
-    var floor = Math.floor(degree / 360.0);
-    return degree - floor * 360.0;
-};
-
-/**
- * Normalize radian value to [0, 2*PI)
- *
- * @static
- * @memberof H
- * @param {Number} rad radian value
- * @returns {number} normalized radian value
- */
-Ms.standardizeRad = function(rad) {
-    var floor = Math.floor(rad / (2 * Math.PI));
-    return rad - floor * 2 * Math.PI;
-};
-
-/**
- * Convert point in rectangle coordinates to polar coordinates. (in radian)
- *
- * @static
- * @memberof H
- * @param {Array} coor rect coordinates
- * @returns {*[]} polar coordinates
- */
-Ms.rectToPolar = function(coor) {
-    var r = Ms.hypot(coor[0], coor[1]);
-    var absTheta = Math.atan2(Math.abs(coor[1]), Math.abs(coor[0])); // in rad
-    var signal = coor[0] * coor[1] < 0;
-    if (coor[0] >= 0) {
-        if (coor[1] >= 0) {
-            return [r, absTheta];
-        } else {
-            return [r, 2 * Math.PI - absTheta];
-        }
-    } else {
-        return [r, Math.PI + (signal ? -1 : 1) * absTheta];
-    }
-};
-
-/**
- * Convert point in polar coordinates to rectangle coordinates.
- *
- * @static
- * @memberof H
- * @param {Array} coor polar coordinates
- * @returns {*[]} rectangle coordinates
- */
-Ms.polarToRect = function(coor) {
-    var cA = Math.cos(coor[1]);
-    var sA = Math.sin(coor[1]);
-    return [coor[0] * cA, coor[0] * sA];
-};
-
-/**
- * Convert distance in latitude to meter
- *
- * @static
- * @memberof H
- * @param {Number} delta distance represented in latitude
- * @returns {number} distance in meter
- */
-Ms.latToMeter = function(delta) {//in meters
-    return 40008000 * delta / 360.0;
-};
-
-/**
- * Convert distance in longtitude around some latitude to meter
- *
- * @static
- * @memberof H
- * @param {Number} lat latitude
- * @param {Number} delta distance in longtitude
- * @returns {number} distance in meter
- */
-Ms.lngToMeterAtLat = function(lat, delta) {
-    return delta * Math.cos(Math.PI * Math.abs(lat) / 180) * 40075040 / 360.0;
-};
-
-/**
- * Convert distance in meter to distance in latitude
- *
- * @static
- * @memberof H
- * @param {Number} meter distance in meter
- * @returns {number} distance in latitude
- */
-Ms.meterToLat = function(meter) {
-    return 360.0 * meter / 40008000;
-};
-
-/**
- * Convert distance in meter to distance in longtitude around some latitude
- *
- * @static
- * @memberof H
- * @param {Number} lat latitude
- * @param {Number} meter distance in meter
- * @returns {number} distance in longtitude
- */
-Ms.meterToLngAtLat = function(lat, meter) {
-    return 360.0 * meter / (40075040 * Math.cos(Math.PI * Math.abs(lat) / 180));
-};
-
-/**
- * Calculate the distance between two points on earth.
- * Points are represented in 2-element arrays ([longtitude, latitude])
- * Assuming the earth a perfect sphere.
- *
- * @static
- * @memberof H
- * @param {Array} p0 point 1
- * @param {Array} p1 point 2
- * @returns {number} distance in meters
- */
-Ms.distOnEarth = function(p0, p1) {
-    //[lng, lat], assuming earth a sphere
-    return Math.PI * 6400000 * Math.acos(Math.cos(p0[0] - p1[0]) + Math.cos(p0[1] - p1[1]) - 1) / 180.0;
-};
-
-module.exports = Ms;
-},{"../mini":3,"./stacktrace":17}],13:[function(require,module,exports){
-/*
- * Object-Related Module
- */
-
-var O = {};
-require('./stacktrace');
-
-//variable type to be checked
-/**
- * Checks if the target string contains a charsequence.
- *
- * @static
- * @memberof H
- * @param {String} str target string
- * @param {String} sub substring to check
- * @returns {boolean}
- */
-O.strContains = function(str, sub) {
-    return str.indexOf(sub) !== -1;
-};
-
-/**
- * Checks if the target string contains a charsequence ignoring the char case.
- *
- * @static
- * @memberof H
- * @param {String} str target string
- * @param {String} sub substring to check
- * @returns {boolean}
- */
-O.strContainsIgnoreCase = function(str, sub) {
-    return str.toLowerCase().indexOf(sub.toLowerCase()) !== -1;
-};
-
-O.parseJson = function(json) {
-    try {
-        return JSON.parse(decodeURI(json));
-    } catch (e) {
-        try {
-            return JSON.parse(json);
-        } catch (e) {
-            e.printStackTrace();
-        }
-    }
-    return undefined;
-};
-
-/**
- * Clones the object via JSON.
- * Should be used on small plain javascript objects only.
- *
- * @static
- * @memberof H
- * @param {Array|Object} obj
- * @return {Object} cloned object
- */
-O.cloneByParse = function(obj) {
-    //for small objects only
-    return JSON.parse(JSON.stringify(obj));
-};
-
-module.exports = O;
-},{"./stacktrace":17}],14:[function(require,module,exports){
-var root = require('./detect').root;
-
-root.requestAnimationFrame = (function() {
-    return root.webkitRequestAnimationFrame ||
-        root.requestAnimationFrame ||
-        root.mozRequestAnimationFrame ||
-        root.oRequestAnimationFrame ||
-        root.msRequestAnimationFrame ||
-        function(callback/*, element*/){
-            return root.setTimeout(callback, 1000 / 60);
-        };
-})();
-},{"./detect":8}],15:[function(require,module,exports){
-/*
- * ResultSet Module
- */
-var RS = {};
-var H = require('lodash/core');
-var ARS = require('./abstractresultset');
-var I = require('./iterator');
-
-var RsIdentifier = '__isRS__';
-
-//the default ResultSet should not exclude any values
-//noinspection JSUnusedLocalSymbols
-function checker(val) {
-    return !val['__isRoot__'];
-}
-
-//default channel doesn't need filter
-ARS.registerChannel(RsIdentifier, [Array.prototype, Object.prototype], checker);
-
-function registerComponent(name, func) {
-    ARS.registerChannelFunction(RsIdentifier, name, func);
-}
-
-function wrapFunction(fn) {
-    return function() {
-        if (checker(arguments[0])) {
-            return fn.apply(this, arguments);
-        }
-    }
-}
-
-/*
- * ResultSet Operations
- */
-/**
- * Iterates an Array or Object, promise version
- *
- * @param {*} fn iterator function
- * @returns {Array|Object} result composed by return statement
- */
-function each(fn) {
-    //patch `fn`
-    arguments[0] = wrapFunction(arguments[0]);
-    return I.each.apply(H, [this].concat(Array.prototype.slice.call(arguments)));
-}
-
-/**
- * Iterates an Array or Object, return the filtered result, promise ver
- *
- * @param {Function} fn filter function
- * @returns {Array|Object} filtered result
- */
-function filter(fn) {
-    fn = wrapFunction(fn);
-    return I.each(this, function(o) {
-        if (fn(o)) {
-            return o;
-        }
-    });
-}
-
-/**
- * Sort an Array or values of an Object, return the sorted array, promise ver
- *
- * @param {Function} fn sort function
- * @returns {*|Array} sorted array
- */
-function sortBy(fn) {
-    fn = wrapFunction(fn);
-    return H.sortBy(this, fn);
-}
-
-/**
- * Returns the value array of an object or itself of an array.
- *
- * @returns {*|Array}
- */
-function toArray() {
-    return H.values(this);
-}
-
-/**
- * Return grouped values by a grouping function of an array or an object
- *
- * @param {Function} fn grouping function
- * @returns {*}
- */
-function groupBy(fn) {
-    fn = wrapFunction(fn);
-    return H.groupBy(this, fn);
-}
-
-/**
- * Joins an array or the value array of an object
- *
- * @param {String} separator result separator
- * @returns {string} joined string
- */
-function join(separator) {
-    return H.values(this).join(separator || "");
-}
-
-/**
- * Sums all numbers in an array or value array of an object
- *
- * @returns {number} sum value
- */
-function sum() {
-    var s = 0;
-    I.each(this || [], function(v) {
-        var nv = H.isInteger(v) ? parseInt(v) : (H.isFloat(v) ? parseFloat(v) : NaN);
-        if (!isNaN(nv)) {
-            s += nv;
-        }
-    });
-    return s;
-}
-
-/**
- * Returns the length of an array or the value array of an object
- *
- * @returns {Number} length
- * @constructor
- */
-function getLength() {
-    return H.values(this).length;
-}
-
-/**
- * Returns the array itself or the value array of an object
- *
- * @returns {*|Array} result array
- */
-function values() {
-    return H.values(this);
-}
-
-/**
- * Returns the key array of an object or the index array of an array
- *
- * @returns {*|Array} key array
- */
-function keys() {
-    return H.keys(this);
-}
-
-/**
- * Returns the flatten array of an nested array.
- *
- * @returns {*|Array}
- */
-function flatten() {
-    return H.flatten(this) || [];
-}
-
-registerComponent("each",    each);
-registerComponent("filter",  filter);
-registerComponent("sortBy",  sortBy);
-registerComponent("toArray", toArray);
-registerComponent("groupBy", groupBy);
-registerComponent("join",    join);
-registerComponent("sum",     sum);
-registerComponent("Length",  getLength);
-registerComponent("values",  values);
-registerComponent("keys",    keys);
-registerComponent("flatten", flatten);
-
-/**
- * Wrap an object to default ResultSet
- *
- * @static
- * @memberof H
- * @param {Array|Object} v anything to wrap
- * @returns {*} wrapped ResultSet object
- */
-var wrap = ARS.wrapperGen(RsIdentifier);
-
-RS.wrap = wrap;
-/**
- * @deprecated
- * @type {wrap}
- */
-RS.fastWrap = wrap;
-
-module.exports = RS;
-},{"./abstractresultset":4,"./iterator":11,"lodash/core":33}],16:[function(require,module,exports){
-var S = {};
-
-var H = require('./detect');
-var root = H.root;
-
-var noop = function() {
-    return function() {};
-};
-
-var navigator = H.root.navigator || {userAgent: ""};
-
-/**
- * Add property to object
- *
- * @static
- * @memberof H
- * @param {Object} object to operate
- * @param {String} key field to fill in
- * @param {Object} descriptor property descriptor
- */
-var addProperty = noop();
-//defineProperty in IE8 only accepts DOM elements as parameters, while in Safari 5 it's opposite
-if (!Object.defineProperty || (0 < H.getIE() <= 8 && navigator.userAgent.indexOf('MSIE') !== -1)) {
-    addProperty = function(instance, k, descriptor) {
-        instance[k] = descriptor.value;
-
-        if (isObject(descriptor[k])) {
-            instance[k].ienumerable = !descriptor.enumerable;
-        } else {
-            if (!instance[k].ienumerables) {
-                instance[k].ienumerables = [];
-            }
-            if (!descriptor.enumerable && instance[k].ienumerables instanceof Array) {
-                instance[k].ienumerables.push(k);
-            } else if (instance['ienumerables']) {
-                instance['ienumerables'][k] = undefined;
-                delete instance['ienumerables'][k];
-            }
-        }
-
-        //configurable, writable to be impl.
-    };
-
-    addProperty.__userDefined__ = true;
-
-    if (!Object.defineProperty) Object.defineProperty = addProperty;
-} else {
-    addProperty = Object.defineProperty;
-}
-
-/**
- * Create object and copy all properties into it.
- *
- * @static
- * @memberof H
- * @param {Object} base base class
- * @param {Object} reference object to copy properties from
- * @example
- *
- * var obj = H.createObject(Object.prototype, {a: 1, b: 2})
- */
-var createObject = function() {
-    function F() {}
-
-    return function(o, p) {
-        F.prototype = o;
-        var instance = new F();
-        if (p) {
-            //p is a descriptor with key name k
-            //is this enough for replacing H.each(H.keys ?
-            for (var k in p) {
-                if (p.hasOwnProperty(k)) addProperty(instance, k, p[k]);
-            }
-        }
-        return instance;
-    };
-}();
-
-//emulate legacy getter/setter API using ES5 APIs
-try {
-    if (!Object.prototype.__defineGetter__ &&
-        addProperty({},"x",{get: function(){return true;}}).x) {
-        addProperty(Object.prototype, "__defineGetter__",
-            {enumerable: false, configurable: true,
-                value: function(name,func)
-                {addProperty(this,name,
-                    {get:func,enumerable: true,configurable: true});
-                }});
-        addProperty(Object.prototype, "__defineSetter__",
-            {enumerable: false, configurable: true,
-                value: function(name,func)
-                {addProperty(this,name,
-                    {set:func,enumerable: true,configurable: true});
-                }});
-    }
-} catch(defPropException) {/*Do nothing if an exception occurs*/}
-
-// Avoid `console` errors in browsers that lack a console.
-(function() {
-    var method;
-    var noop = function () {};
-    var methods = [
-        'assert', 'clear', 'count', 'debug', 'dir', 'dirxml', 'error',
-        'exception', 'group', 'groupCollapsed', 'groupEnd', 'info', 'log',
-        'markTimeline', 'profile', 'profileEnd', 'table', 'time', 'timeEnd',
-        'timeline', 'timelineEnd', 'timeStamp', 'trace', 'warn'
-    ];
-    var length = methods.length;
-    var console = root.console || {};
-    if (!root.console) root.console = console;
-
-    while (length--) {
-        method = methods[length];
-
-        // Only stub undefined methods.
-        if (!console[method]) {
-            console[method] = noop;
-        }
-    }
-}());
-
-//Polyfill for IE<9
-if (!String.prototype.trim) {
-    String.prototype.trim = function () {
-        return this.replace(/^[\s\uFEFF\xA0]+|[\s\uFEFF\xA0]+$/g, '');
-    };
-}
-
-S.addProperty = addProperty;
-S.createObject = createObject;
-
-S.noop = function() {};
-
-module.exports = S;
-},{"./detect":8}],17:[function(require,module,exports){
-var C = {};
-
-var Mini = require('../mini');
-
-function InformError() {
-    this.message = "Inform Error Catchers";
-    this.name = "InformError";
-    this.stack = new Error(this.name).stack;
-}
-
-InformError.prototype = Error.prototype;
-
-C.InformError = InformError;
-
-var clog = function (content) {
-    console.error(content);
-    //throw a simple error to inform catchers, eval(someone is catching)
-    if (eval('__catching')) {
-        throw new InformError("Nested Error");
-    }
-};
-
-var logStack = function(stackStack) {
-    var joined = [];
-    Mini.arrayEach(stackStack || [], function(stack) {
-        if (typeof stack == 'string') {
-            joined = joined.concat(stack.split("\n"));
-        } else if (stack instanceof Error) {
-            joined = joined.concat(stack.stack.split("\n"));
-        }
-    });
-    if (joined.length != 0) {
-        var ret = joined[0];
-        for (var i = 1; i < joined.length; i++) {
-            ret += "\n" + joined[i];
-        }
-        clog.apply(this, [ret]);
-    }
-};
-
-/**
- * Generate stack trace string. (separated by `\n`)
- *
- * @static
- * @memberof H
- * @param {String} [title]
- * @returns {string} stack trace string
- */
-C.getStackTrace = function(title) {
-    var callstack = "Referenced From: " + (title || "");
-    var e = title instanceof Error ? title : new Error(callstack);
-    var split = e.stack.split('\n');
-    if (split.length > 1) {
-        var t = split[0];
-        //remove getStackTrace itself
-        if (t.indexOf("getStackTrace") !== -1) {
-            split.shift();
-            split.shift();
-            split.unshift(t);
-        }
-        // split.unshift(callstack);
-        return split.join('\n');
-    }
-    return e.stack;
-};
-
-var DefaultNestedTitle = "Nested error:";
-var DefaultTitle = "Error:";
-
-/**
- * Print stack trace stack.
- *
- * @static
- * @memberof H
- * @param {String|Error} [title] title or error of current layer
- * @param {Array} [stackStack] stack trace stack (possibly)
- * @param {boolean} [silient] the current error should be silent
- * @example
- *
- * usage:
- * H.printStackTrace(string/error, stackStack)
- * H.printStackTrace(string/error)
- * H.printStackTrace(stackStack)
- * H.printStackTrace()
- * variant:
- * error.printStackTrace() -> printStackTrace(error, [])
- */
-C.printStackTrace = function(title, stackStack, silient) {
-    if (Mini.isArrayLike(title)) {
-        //noinspection JSValidateTypes for arguments
-        stackStack = title;
-        if (stackStack.length) {
-            title = DefaultNestedTitle;
-        } else {
-            title = DefaultTitle;
-        }
-    }
-    title = title || DefaultTitle;
-    stackStack = stackStack || [];
-    if (!Mini.isArrayLike(stackStack) || typeof stackStack == 'string') {
-        stackStack = [stackStack];
-    }
-    if (!silient) stackStack.unshift(C.getStackTrace(title));
-    logStack.call(this, stackStack);
-};
-
-/**
- * Print string with stack trace in debug mode.
- *
- * @static
- * @memberof H
- * @param {String|Error} [d] content to print
- * @param {Array} [stackTrace] stack trace stack
- */
-C.errlog = function(d, stackTrace) {
-    if (C.debug) {
-        C.printStackTrace(d);
-        if (stackTrace && !C.isArrayLike(stackTrace)) {
-            console.error("Referenced From: " + stackTrace);
-        } else if (stackTrace && C.isArrayLike(stackTrace)) {
-            for (var i = stackTrace.length - 1; i > -1; i--) {
-                if (stackTrace[i]) console.error("Referenced From: " + stackTrace[i]);
-            }
-        }
-    }
-};
-
-function printStackTrace(stackStack) {
-    C.printStackTrace(this, stackStack);
-}
-
-Error.prototype.getStackTrace = C.getStackTrace;
-Error.prototype.printStackTrace = printStackTrace;
-
-module.exports = C;
-},{"../mini":3}],18:[function(require,module,exports){
-var C = {};
-var H = require('./stacktrace');
-var Detect = require('./detect');
-
-if (Detect.isNodejs) {
-    Detect.root.__sessionStorage = {};
-
-    C.setItem = setItemFallback;
-    C.getItem = getItemFallback;
-    C.removeItem = removeItemFallback;
-} else if (Detect.root.sessionStorage) try {
-    sessionStorage.setItem('test', '1');
-    sessionStorage.removeItem('test');
-
-    /**
-     * Store value to session storage.
-     * In node.js environment, data will be stored in global variable `__sessionStorage` (lost on exit).
-     * In browsers without sessionStorage support, will try cookie first.
-     *
-     * @static
-     * @memberof H
-     * @param key
-     * @param value
-     */
-    C.setItem = function(key, value) {
-        sessionStorage.removeItem(key);
-        sessionStorage.setItem(key, value);
-    };
-
-    /**
-     * Deprecated store value to session storage.
-     *
-     * @static
-     * @memberof H
-     * @deprecated
-     * @param key
-     * @param value
-     * @type {Function}
-     */
-    C.secAddItem = C.setItem;
-
-    /**
-     * Remove stored value of key in session storage.
-     *
-     * @static
-     * @memberof H
-     * @param key
-     */
-    C.removeItem = function(key) {
-        sessionStorage.removeItem(key);
-    };
-
-    /**
-     * Retrieve stored value in session storage.
-     *
-     * @static
-     * @memberof H
-     * @param key
-     */
-    C.getItem = function(key) {
-        return sessionStorage.getItem(key);
-    };
-
-} catch (e) {
-    H.printStackTrace('Session Storage Not Supported');
-
-    C.secAddItem = function(key, value) {
-        setCookie(key, value, 1);
-    };
-
-    C.removeItem = function(key) {
-        setCookie(key, null, 0);
-    };
-
-    C.getItem = function(key) {
-        return getCookie(key);
-    };
-}
-
-function setCookie(key, value, days) {
-    var date = new Date();
-    date.setTime(date.getTime() + days * 86400000);
-    document.cookie = key + "=" + value + "; expires=" + date.toUTCString();
-}
-
-function getCookie(key) {
-    var regex = new RegExp('^\\s*' + key + '=');
-    var splits = document.cookie.split(';');
-    for (var i = 0; i < splits.length; i++) {
-        var s = splits[i];
-        var d = s.match(regex);
-        if (d !== null && d.length !== 0) {
-            return s.replace(regex, '');
-        }
-    }
-}
-
-function setItemFallback(key, value) {
-    Detect.root.__sessionStorage[key] = value;
-}
-
-function getItemFallback(key) {
-    return Detect.root.__sessionStorage[key];
-}
-
-function removeItemFallback(key) {
-    Detect.root.__sessionStorage[key] = undefined;
-}
-
-module.exports = C;
-},{"./detect":8,"./stacktrace":17}],19:[function(require,module,exports){
-var C = {};
-
-C.now = Date.now;
-
-/**
- * Run a function, count the time consumed.
- *
- * @static
- * @memberof H
- * @param {Function} cb function to run
- * @returns {number} time in millis
- */
-C.test = function(cb) {
-    var o = C.now();
-    cb();
-    var d = C.now() - o;
-    console.log(d);
-    return d;
-};
-
-/**
- * Run a function, and record it in "Profile" tab in chromium.
- *
- * @static
- * @memberof H
- * @param {Function} cb function to run
- * @param {String} title title of this run
- * @returns {number} time in millis
- */
-C.profile = function(cb, title) {
-    console.profile(title || "Profile");
-    var o = C.now();
-    cb();
-    var d = C.now() - o;
-    //noinspection JSUnresolvedFunction
-    console.profileEnd(title || "Profile");
-    return d;
-};
-
-/**
- * Do something for some times
- *
- * @static
- * @memberof H
- * @param {Function} cb function to run
- * @param {Number} times times function will be executed
- */
-C.repeat = function(cb, times) {
-    if (times > 0) {
-        do {
-            cb();
-        } while(times--);
-    }
-};
-
-/**
- * Test some method and record the time consumption for several times.
- *
- * @static
- * @memberof H
- * @param {Function} cb function to run
- * @param {Number} times times function will be executed
- */
-C.testTimes = function(cb, times) {
-    C.test(function() {
-        C.repeat(cb, times);
-    });
-};
-
-/**
- * Profile some method for several times.
- *
- * @static
- * @memberof H
- * @param {Function} cb function to run
- * @param {Number} times times function will be executed
- * @param {String} title title of this run
- */
-C.profileTimes = function(cb, times, title) {
-    C.profile(function() {
-        C.repeat(cb, times);
-    }, title);
-};
-
-module.exports = C;
-},{}],20:[function(require,module,exports){
-var C = {};
-
-var I = require('./iterator');
-var D = require('./detect');
-
-var location = D.root.location || "";
-
-C.QueryString = function(item){
-    var svalue = location.search.match(new RegExp("[\?\&]" + item + "=([^\&]*)(\&?)","i"));
-    return svalue ? svalue[1] : svalue;
-};
-
-/**
- * @static
- * @memberof H
- * @deprecated
- */
-C.Request = {
-    QueryString: C.QueryString
-};
-
-/**
- * Generate URL with GET param string
- *
- * @static
- * @memberof H
- * @param {String} server prefix string (domain)
- * @param {String} action path of file requests
- * @param {Object} params get param object
- * @returns {string} URL string
- * @example
- *
- * H.getUrlByParams("http://abc.def/", "path/of/file", {a: 1})
- * =>
- * "http://abc.def/path/of/file?a=1"
- */
-C.getUrlByParams =  function(server, action, params) {
-    var paramUrl = "";
-    I.each(params || {}, function(param, key) {
-        paramUrl += "&" + key + "=";
-        var p = "";
-        if (param instanceof Array) {
-            p = "[";
-            var tr = "";
-            I.each(param, function(val) {
-                tr += ",";
-                if (val instanceof Boolean ||
-                    val instanceof String ||
-                    val instanceof Number ||
-                    typeof val === "string" ||
-                    typeof val === "number") {
-                    tr += "\"" + val + "\"";
-                } else if (val) {
-                    tr += val;
-                }
-            });
-            p += tr.substr(1) + "]";
-        } else {
-            p = param;
-        }
-        paramUrl += p;
-    });
-    return (server + action + "?" + paramUrl.substr(1));
-};
-
-/**
- * Generate simple param string from an object
- *
- * @static
- * @memberof H
- * @param {Object} data param object
- * @returns {string}
- * @example
- *
- * H.param({a:1, b:2})
- * =>
- * "a=1&b=2"
- */
-C.param = function(data) {
-    var s = [], add = function(k, v) {
-        s[s.length] = encodeURIComponent(k) + "=" + encodeURIComponent(v);
-    };
-
-    I.each(data, function(o, k) {
-        add(k, o);
-    });
-
-    return s.join("&").replace(/%20/g, "+");
-};
-
-module.exports = C;
-},{"./detect":8,"./iterator":11}],21:[function(require,module,exports){
-var C = {};
-
-/**
- * Generate Uuid
- *
- * @static
- * @memberof H
- * @param {Number} [len] length of target string, not specified by default
- * @param {Number} [radix] when length specified, limit possible characters in the result
- * @returns {string}
- */
-C.uuid = function (len, radix) {
-    var chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'.split('');
-    var uuid = [], i;
-    radix = radix || chars.length;
-
-    if (len) {
-        // Compact form
-        for (i = 0; i < len; i++) uuid[i] = chars[0 | Math.random()*radix];
-    } else {
-        // rfc4122, version 4 form
-        var r;
-        // rfc4122 requires these characters
-        uuid[8] = uuid[13] = uuid[18] = uuid[23] = '-';
-        uuid[14] = '4';
-        // Fill in random data.  At i==19 set the high bits of clock sequence as
-        // per rfc4122, sec. 4.1.5
-        for (i = 0; i < 36; i++) {
-            if (!uuid[i]) {
-                r = 0 | Math.random()*16;
-                uuid[i] = chars[(i == 19) ? (r & 0x3) | 0x8 : r];
-            }
-        }
-    }
-    return uuid.join('');
-};
-
-/**
- * Generate Uuid in Default Format
- *
- * @static
- * @memberof H
- * @returns {string}
- */
-C.fastUuid = function() {
-    var chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'.split('');
-    var uuid = new Array(36), rnd=0, r;
-    for (var i = 0; i < 36; i++) {
-        if (i === 8 || i === 13 || i === 18 || i === 23) {
-            uuid[i] = '-';
-        } else if (i === 14) {
-            uuid[i] = '4';
-        } else {
-            if (rnd <= 0x02) rnd = 0x2000000 + (Math.random()*0x1000000)|0;
-            r = rnd & 0xf;
-            rnd = rnd >> 4;
-            uuid[i] = chars[(i === 19) ? (r & 0x3) | 0x8 : r];
-        }
-    }
-    return uuid.join('');
-};
-
-module.exports = C;
-},{}],22:[function(require,module,exports){
-var DOM = require('./src/cssselector');
-
-var Core = require('coreutil/core');
-var RS = require('./src/domresultset');
-var Attr = require('./src/cssattribute');
-
-Core.extend(Core, RS);
-Core.extend(Core, Attr);
-
-Core.root.H$ = DOM;
-
-module.exports = DOM;
-},{"./src/cssattribute":24,"./src/cssselector":26,"./src/domresultset":27,"coreutil/core":2}],23:[function(require,module,exports){
-var Func = require('./funchelper');
-
-var Attr = {};
-
-function noop(v) {return v}
-
-/**
- * Get the attribute of the element
- *
- * @param {Element|walkAndGetAttributes} ele element to query
- * @param {String} attr attribute to query
- * @returns {string} attribute value
- */
-function innerGetAttribute(ele, attr) {
-    return ele.getAttribute(attr);
-}
-
-/**
- * Walks and recursively get all Elements' attribute value in the current ResultSet.
- * And returns all results as a ResultSet.
- *
- * @param {Array|Element|NodeList} eles ResultSet
- * @param {String} attr attribute name
- * @param {Function} [postProcess] return value postprocessor
- * @param {*} [addtionalAttr] parameter for `postProcess`
- * @returns {*} ResultSet contains all attributes
- */
-function walkAndGetAttributes(eles, attr, postProcess, addtionalAttr) {
-    return Func.createWalker(eles, function () {
-        return (postProcess || noop)(innerGetAttribute(this, attr), addtionalAttr);
-    }, [eles, attr, postProcess, addtionalAttr]);
-}
-
-/**
- * Set the attribute of the element
- *
- * @param {Element|walkAndGetAttributes} ele element to operate
- * @param {String} attr attribute to operate
- * @param {String} val attribute value to set
- */
-function innerSetAttribute(ele, attr, val) {
-    ele.setAttribute(attr, val);
-}
-
-/**
- * Walks and recursively set all Elements' attribute values to a constant value in the current ResultSet.
- *
- * @param {Array|Element|NodeList} eles ResultSet
- * @param {String} attr attribute name
- * @param {String} val attribute value to set
- */
-function walkAndSetAttributes(eles, attr, val) {
-    return Func.createWalker(eles, innerSetAttribute, [eles, attr, val]);
-}
-
-/**
- * Walks and recursively set all Elements' attribute values to the corresponding value in the offered ResultSet.
- *
- * @param {Array|Element|NodeList} eles ResultSet
- * @param {String} attr attribute name
- * @param {String} valSet different attribute values stored as a ResultSet
- */
-function walkAndSetAttributesBySet(eles, attr, valSet) {
-    return Func.createWalker(eles, innerSetAttribute, [eles, attr, valSet], function(args, i) {
-        args[2] = args[2][i];
-    });
-}
-
-/**
- * Get or set attribute of the current ResultSet.
- *
- * @param {String} attribute attribute name
- * @param {String|Array|NodeList|Element} [val] attribute value to set, or the ResultSet of attribute values
- */
-Attr.attribute = Func.assembleFunctions(walkAndGetAttributes, walkAndSetAttributes, 1, 0);
-
-function splitClassString(val) {
-    return (val || "").trim().split(/[\s]+/) || [];
-}
-
-function splitGen(strategy) {
-    var func = strategy ? Func.arrayEnsureContains : Func.arrayEnsureWithout;
-    return function(val, clzz) {
-        return func(splitClassString(val), clzz).join(' ');
-    };
-}
-
-/**
- * Gather all classes of each Element as a list of string in the current ResultSet.
- *
- * @param {Function} [alternative] alternative class string decorator
- * @param {*} parameter No use
- */
-function getClasses(alternative, parameter) {
-    return innerGetClass(this, alternative, parameter);
-}
-
-/**
- * Gather all classes of each Element in the current Result to lists of string.
- *
- * @param {Array|NodeList|Element|getClasses|classOpGen} ele element to query
- * @param alternative
- * @param parameter
- */
-function innerGetClass(ele, alternative, parameter) {
-    return walkAndGetAttributes(ele, 'class', alternative || splitClassString, parameter);
-}
-
-/**
- * Class attribute operator function.
- * Fetch the full class string of each Element in the current ResultSet, and pass it to an decorator function with a
- * parameter.
- * Mode 1: addClass mode, ensures the specific className will be in the class string
- * Mode 2: removeClass mode, ensures the specific className will not be in the class string
- * And then set the decorated class string back to the elements in the current ResultSet.
- *
- * @param {boolean} strategy Mode strategy. used to switch mode
- * @returns {Function} Class string processor, work as addClass or removeClass
- */
-function classOpGen(strategy) {
-    return function(className) {
-        var clss = innerGetClass(this, splitGen(strategy), className);
-
-        walkAndSetAttributesBySet(this, 'class', clss);
-    };
-}
-
-Attr.getClasses = getClasses;
-Attr.addClass = classOpGen(true);
-Attr.removeClass = classOpGen(false);
-
-module.exports = Attr;
-},{"./funchelper":28}],24:[function(require,module,exports){
-/*
- * CSS Attribute Operation Basic
- */
-var Attr = {};
-
-var Func = require('./funchelper');
-var Vendor = require('./vendor');
-var Mini = require('coreutil/mini');
-
-var AttributeMap = {
-    'width': ['innerWidth', 'clientWidth'],
-    'height': ['innerHeight', 'clientHeight'],
-    'parent': ['parentElement', 'parentNode'],
-    'text': ['innerText', 'textContent']
-};
-
-/**
- * Extracts the only element in a ResultSet if there's only one.
- *
- * @param {Element|NodeList|Array} object ResuleSet to check
- * @returns {*|null} extracted Element object
- */
-function getSingleElement(object) {
-    if (object instanceof Element) {
-        return object;
-    }
-    var count = 0, vals = [];
-    if (Mini.isArrayLike(object)) {
-        Mini.arrayEach(object, function(v) {
-            if (v instanceof Element) {
-                count ++;
-                vals.push(v);
-            }
-        });
-        if (count === 1) {
-            return vals[0];
-        }
-    }
-    return false;
-}
-
-function queryAttrAlias(attr) {
-    var c = Vendor.toCamel(attr);
-    var f = Vendor.fromCamel(attr);
-    var c_alias = Vendor.attrs[c] || [];
-    var f_alias = Vendor.attrs[f] || [];
-    return c_alias.concat(f_alias).concat([attr]);
-}
-
-/*
- * Getters
- */
-function directRetrieveAttribute(ele, attr) {
-    var mapped = AttributeMap[attr] || [];
-    for (var i = 0; i < mapped.length; i++) {
-        var ret = ele[mapped[i]];
-
-        if (ret !== undefined) return ret;
-    }
-}
-
-function innerGetAttribute(ele, attr) {
-    return getComputedStyle(ele)[attr];
-}
-
-function innerGetDeclaredAttr(ele, attr) {
-    return (ele.style || {})[attr];
-}
-
-function innerGetAttributeUntil(ele, attr, style) {
-    var func = style === 1 ? innerGetAttribute : innerGetDeclaredAttr;
-    var direct = directRetrieveAttribute(ele, attr);
-    if (direct !== undefined) return direct;
-    var attrs = queryAttrAlias(attr);
-    for (var i = 0; i < (attrs || []).length; i++) {
-        var ret = func(ele, attrs[i]);
-        if (ret) return ret;
-    }
-}
-
-function collectElementsAttributes(eles, attr, style) {
-    return Func.createWalker(eles, innerGetAttributeUntil, [eles, attr, style]);
-}
-
-/*
- * Setters
- */
-//sometimes direct way doesn't work, cuz some shortcut attributes like clientWidth are readonly
-function directSetAttribute(ele, attr, val) {
-    var mapped = AttributeMap[attr] || [];
-    for (var i = 0; i < mapped.length; i++) {
-        if (ele[mapped[i]]) {
-            ele[mapped[i]] = val;
-            return true;
-        }
-    }
-    return false;
-}
-
-function innerSetAttribute(ele, attr, val) {
-    ele.style[attr] = val;
-}
-
-function innerSetAttributeUntil(ele, attr, val) {
-    //some attributes are read-only. try but don't believe it
-    directSetAttribute(ele, attr, val);
-    var attrs = queryAttrAlias(attr) || [];
-    for (var i = 0; i < attrs.length; i++) {
-        innerSetAttribute(ele, attrs[i], val);
-    }
-}
-
-/**
- * Walks on ResultSet and set attributes of each to val
- *
- * @param {Element|NodeList|Array} eles ResultSet to check
- * @param {String} attr attribute name
- * @param {String} val attribute value to set
- * @returns {*}
- */
-function walkAndSetAttributes(eles, attr, val) {
-    return Func.createWalker(eles, innerSetAttributeUntil, [eles, attr, val]);
-}
-
-/**
- * Get computed style of a ResultSet
- *
- * @param {Element|NodeList|Array} ele ResultSet to check
- * @param {String} attr attribute name
- */
-function getCssAttribute(ele, attr) {
-    ele = getSingleElement(ele);
-    if (!ele || !attr) {
-        return;
-    }
-    return collectElementsAttributes(ele, attr, 1);
-}
-
-//getAttribute and setAttribute is in DOM.Element, do not overwrite it
-Attr.getCssAttribute = getCssAttribute;
-Attr.getSingleElement = getSingleElement;
-Attr.setCssAttribute = walkAndSetAttributes;
-
-module.exports = Attr;
-},{"./funchelper":28,"./vendor":30,"coreutil/mini":3}],25:[function(require,module,exports){
-/*
- * CSS Attributes Operate
- */
-var Attr = require('./cssattribute');
-var H = require('coreutil/core');
-
-var Func = require('./funchelper');
-
-var Ops = {};
-
-/*
- * Simple Attributes
- */
-
-function attributeGetterGen(attr) {
-    return function(ele) {
-        return Attr.getCssAttribute(ele, attr);
-    };
-}
-
-function attributeSetterGen(attr) {
-    return function(ele, val) {
-        return Attr.setCssAttribute(ele, attr, val);
-    };
-}
-
-/**
- * Get or set the specific attribute on all elements in the ResultSet
- *
- * @param {String} attr attribute name
- * @returns {*|null}
- */
-function attributeOpAssembled(attr) {
-    return Func.assembleFunctions(attributeGetterGen(attr), attributeSetterGen(attr), 0);
-}
-
-Ops.text =    attributeOpAssembled('text');
-Ops.height =  attributeOpAssembled('height');
-Ops.width =   attributeOpAssembled('width');
-Ops.parent =  attributeOpAssembled('parent');
-
-//General CSS Attributes
-Ops.cssAttr = function(attr, value) {
-    if (typeof attr === 'string' && arguments.length === 1) {
-        //get
-        return Attr.getCssAttribute(this, attr);
-    } else if (typeof attr === 'object') {
-        //set
-        var ele = this;
-        H.each(attr, function(val, key) {
-            Attr.setCssAttribute(ele, key, val);
-        });
-    } else if (arguments.length === 2) {
-        Attr.setCssAttribute(this, attr, value);
-    }
-};
-
-/*
- * Class
- */
-
-module.exports = Ops;
-},{"./cssattribute":24,"./funchelper":28,"coreutil/core":2}],26:[function(require,module,exports){
-var RS = require('./domresultset');
-var wrap = RS.wrapDom;
-var Mini = require('coreutil/mini');
-
-/**
- * Search elements in the current ResultSet.
- *
- * @param {Array|Element|NodeList|Node} ele ResultSet to check
- * @param {String|NodeList|Node|Window} selector CSS selector string
- * @returns {*} ResultSet of elements
- */
-function findElement(ele, selector) {
-
-    //top element is `html`, not document
-
-    //if selector is RS or window/document, wrap it
-    if (typeof selector !== 'string') {
-        if (selector === window || selector === document
-            || (selector instanceof Node && !(selector instanceof Element))) {
-            //css operations not allowed for window, but event operations allowed.
-            //TODO: add dom event module, make a splitter and change code here
-            return wrap(document.querySelectorAll('html'));
-        }
-        if (selector instanceof NodeList
-            || selector instanceof Element
-            || Mini.isArrayLike(selector)) {
-            return wrap(selector);
-        }
-    }
-
-    if (ele === document) {
-        return wrap(document.querySelectorAll(selector));
-    } else if(ele instanceof Element) {
-        return wrap(ele.prototype.querySelectorAll(selector));
-    }
-}
-
-/**
- * CSS selector processing module
- *
- * @param {String} selector CSS selector string
- */
-var $ = function(selector) {
-    return findElement(document, selector);
-};
-
-$.findElement = findElement;
-
-module.exports = $;
-},{"./domresultset":27,"coreutil/mini":3}],27:[function(require,module,exports){
-var RS = {};
-
-var ARS =      require('coreutil/src/abstractresultset');
-var Mini =     require('coreutil/mini');
-var Selector = require('./cssselector');
-var Attr =     require('./attribute');
-var Ops =      require('./cssoperators');
-var NodeOps =  require('./nodeop');
-
-var DomIdentifier = '__isDOM__';
-
-// var getSingleElement = CssAttr.getSingleElement;
-
-//node.js fallback
-var htmlElementObj = function() {};
-
-try {
-    htmlElementObj = eval('Element');
-} catch (e) {
-    e.printStackTrace("DOM cannot be operated in node.js environment!");
-    return;
-}
-
-function checker(val) {
-    if (val instanceof Array || val instanceof htmlElementObj || val instanceof NodeList) {
-        return true;
-    }
-}
-
-//, Node.prototype node can be added as event targets, but not css now.
-ARS.registerChannel(DomIdentifier, [Element.prototype, Array.prototype, NodeList.prototype], checker);
-
-function registerComponent(name, func) {
-    ARS.registerChannelFunction(DomIdentifier, name, func);
-}
-
-/*
- * ResultSet Operations
- *
- * TODO: enable access control from ResultSet impl. (expand preCheck function)
- * for example:
- * ban access from DomResultSet.join
- */
-/**
- * Clones a list of nodes or a single node
- * Supports depth up to 1.
- *
- * @memberof {Array|Element}
- */
-function cloneDomElement(eles, deep) {
-    if (eles instanceof Element) {
-        return eles.cloneNode(!!deep);
-    }
-    if (Mini.isArrayLike(this)) {
-        return Mini.arrayEach(eles, function(ele) {
-            return cloneDomElement(ele, deep);
-        });
-    }
-}
-
-/**
- * Clones the current ResultSet
- *
- * @param {boolean} [deep] do deep copy or not
- */
-function cloneDom(deep) {
-    return cloneDomElement(this || [], deep);
-}
-
-/**
- * Find elements satisfying the specific selector under the current ResultSet
- *
- * @param {String} selector selector string
- * @returns {Array|NodeList|Element} ResultSet
- */
-function find(selector) {
-    return Selector.findElement(this, selector);
-}
-
-registerComponent("clone",        cloneDom);
-registerComponent("css",          Ops.cssAttr);
-registerComponent("text",         Ops.text);
-registerComponent("attribute",    Attr.attribute);
-registerComponent("getClasses",   Attr.getClasses);
-registerComponent("addClass",     Attr.addClass);
-registerComponent("removeClass",  Attr.removeClass);
-registerComponent("append",       NodeOps.append);
-registerComponent("prepend",      NodeOps.prepend);
-registerComponent("insertHead",   NodeOps.insertHead);
-registerComponent("insertTail",   NodeOps.insertTail);
-registerComponent("parent",       Ops.parent);
-registerComponent("width",        Ops.width);
-registerComponent("height",       Ops.height);
-registerComponent("find",         find);
-
-var wrap = ARS.wrapperGen(DomIdentifier);
-
-RS.wrapDom = wrap;
-
-//RS.H$ is a CSS selector processor
-RS.H$ = Selector;
-
-module.exports = RS;
-},{"./attribute":23,"./cssoperators":25,"./cssselector":26,"./nodeop":29,"coreutil/mini":3,"coreutil/src/abstractresultset":4}],28:[function(require,module,exports){
-var Func = {};
-var Mini = require('coreutil/mini');
-
-function assembleFunctions(func1, func2, desiredArgsSize, earlyExitSize) {
-    return function() {
-        if (arguments.length === earlyExitSize) return;
-        var func = arguments.length === desiredArgsSize ? func1 : func2;
-        return func.apply(this, [this].concat(Array.prototype.slice.call(arguments)));
-    };
-}
-
-Func.assembleFunctions = assembleFunctions;
-
-Func.noop = function(v) {
-    return v;
-};
-
-function copyArray(arr) {
-    var ret = [];
-    for (var i = 0; i < arr.length; i++) {
-        ret[i] = arr[i];
-    }
-    return ret;
-}
-
-function recursivelyDomSomething(elements, collector, initArgs, argProcessor) {
-    //eles, ...args
-    function gen(eles) {
-        var args = arguments;
-        if (eles instanceof Element) {
-            return collector.apply(eles, args);
-        }
-        if (Mini.isArrayLike(eles)) {
-            var ret = [];
-            for (var i = 0; i < eles.length; i++) {
-                var ele = eles[i];
-                if (ele instanceof Element || Mini.isArrayLike(ele)) {
-                    var newArgs = copyArray(args);
-                    newArgs[0] = ele;
-                    ret[i] = gen.apply(ele, (argProcessor || Func.noop)(newArgs, i));
-                }
-            }
-            return ret;
-        }
-    }
-    return gen.apply(elements, initArgs);
-}
-
-Func.createWalker = recursivelyDomSomething;
-
-function arraySplit(arr, ele) {
-    var a = [];
-    var b = [];
-    var e;
-    for (var i = 0; i < arr.length; i++) {
-        if ((e = arr[i]) != ele) {
-            a.push(e);
-        } else {
-            b.push(e);
-        }
-    }
-    return [a, b];
-}
-
-function ensureArrayContains(arr, ele) {
-    return arraySplit(arr, ele)[0].concat([ele]);
-}
-
-function ensureArrayWithout(arr, ele) {
-    return arraySplit(arr, ele)[0];
-}
-
-Func.arrayEnsureContains = ensureArrayContains;
-Func.arrayEnsureWithout = ensureArrayWithout;
-
-module.exports = Func;
-},{"coreutil/mini":3}],29:[function(require,module,exports){
-var N = {};
-
-var Func = require('./funchelper');
-var Mini = require('coreutil/mini');
-
-function insertElementAfter(targetElement, newElement) {
-    if (typeof newElement === 'string') {
-        return targetElement.insertAdjacentHTML('afterend', newElement);
-    }
-    if (targetElement.nodeType !== Element.DOCUMENT_NODE) {
-        targetElement.parentNode.insertBefore(newElement, targetElement.nextSibling);
-    }
-}
-
-function insertElementBefore(targetElement, newElement) {
-    if (typeof newElement === 'string') {
-        return targetElement.insertAdjacentHTML('beforebegin', newElement);
-    }
-    if (targetElement.nodeType !== Element.DOCUMENT_NODE) {
-        targetElement.parentNode.insertBefore(newElement, targetElement);
-    }
-}
-
-function insertElementAtBeginning(targetElement, newElement) {
-    if (typeof newElement === 'string') {
-        return targetElement.insertAdjacentHTML('afterbegin', newElement);
-    }
-    targetElement.insertBefore(newElement, targetElement.firstChild);
-}
-
-function insertElementAtEnd(targetElement, newElement) {
-    if (typeof targetElement === 'string') {
-        return targetElement.insertAdjacentHTML('beforeend', newElement);
-    }
-    targetElement.appendChild(newElement);
-    // targetElement.insertBefore(newElement, targetElement.lastChild);
-}
-
-function basePender(strategy) {
-    return function(base, newElement) {
-        return Func.createWalker(base, strategy, [base, newElement]);
-    };
-}
-
-var baseAppend = basePender(insertElementAtEnd);
-var basePrepend = basePender(insertElementAtBeginning);
-var baseInsertHead = basePender(insertElementBefore);
-var baseInsertEnd = basePender(insertElementAfter);
-
-//can be abstracted
-function pender(basePender) {
-    return function(newElements) {
-        var base = this;
-        if (Mini.isArrayLike(newElements)) {
-            Mini.arrayEach(newElements, function(ele) {
-                basePender(base, ele);
-            });
-        } else {
-            basePender(base, newElements);
-        }
-    };
-}
-
-var append = pender(baseAppend);
-var prepend = pender(basePrepend);
-var insertAtHead = pender(baseInsertHead);
-var insertAtEnd = pender(baseInsertEnd);
-
-N.append = append;
-N.prepend = prepend;
-N.insertHead = insertAtHead;
-N.insertTail = insertAtEnd;
-
-module.exports = N;
-},{"./funchelper":28,"coreutil/mini":3}],30:[function(require,module,exports){
-/*
- * Vendor specified properties list
- */
-
-var V = {};
-
-V.attrs = {
-    "align-content": [
-        "-webkit-align-content"
-    ],
-    "align-items": [
-        "-webkit-align-items"
-    ],
-    "align-self": [
-        "-webkit-align-self"
-    ],
-    "animation": [
-        "-webkit-animation",
-        "-ms-animation"
-    ],
-    "animation-delay": [
-        "-webkit-animation-delay",
-        "-ms-animation-delay"
-    ],
-    "animation-direction": [
-        "-webkit-animation-direction",
-        "-ms-animation-direction"
-    ],
-    "animation-duration": [
-        "-webkit-animation-duration",
-        "-ms-animation-duration"
-    ],
-    "animation-fill-mode": [
-        "-webkit-animation-fill-mode",
-        "-ms-animation-fill-mode"
-    ],
-    "animation-iteration-count": [
-        "-webkit-animation-iteration-count",
-        "-ms-animation-iteration-count"
-    ],
-    "animation-name": [
-        "-webkit-animation-name",
-        "-ms-animation-name"
-    ],
-    "animation-play-state": [
-        "-webkit-animation-play-state",
-        "-ms-animation-play-state"
-    ],
-    "animation-timing-function": [
-        "-webkit-animation-timing-function",
-        "-ms-animation-timing-function"
-    ],
-    "app-region": [
-        "-webkit-app-region"
-    ],
-    "appearance": [
-        "-webkit-appearance",
-        "-moz-appearance"
-    ],
-    "aspect-ratio": [
-        "-webkit-aspect-ratio"
-    ],
-    "backface-visibility": [
-        "-webkit-backface-visibility",
-        "-ms-backface-visibility"
-    ],
-    "background-clip": [
-        "-webkit-background-clip"
-    ],
-    "background-composite": [
-        "-webkit-background-composite"
-    ],
-    "background-origin": [
-        "-webkit-background-origin"
-    ],
-    "background-size": [
-        "-webkit-background-size"
-    ],
-    "border-after": [
-        "-webkit-border-after"
-    ],
-    "border-after-color": [
-        "-webkit-border-after-color"
-    ],
-    "border-after-style": [
-        "-webkit-border-after-style"
-    ],
-    "border-after-width": [
-        "-webkit-border-after-width"
-    ],
-    "border-before": [
-        "-webkit-border-before"
-    ],
-    "border-before-color": [
-        "-webkit-border-before-color"
-    ],
-    "border-before-style": [
-        "-webkit-border-before-style"
-    ],
-    "border-before-width": [
-        "-webkit-border-before-width"
-    ],
-    "border-bottom-left-radius": [
-        "-webkit-border-bottom-left-radius"
-    ],
-    "border-bottom-right-radius": [
-        "-webkit-border-bottom-right-radius"
-    ],
-    "border-end": [
-        "-webkit-border-end",
-        "-moz-border-end"
-    ],
-    "border-end-color": [
-        "-webkit-border-end-color",
-        "-moz-border-end-color"
-    ],
-    "border-end-style": [
-        "-webkit-border-end-style",
-        "-moz-border-end-style"
-    ],
-    "border-end-width": [
-        "-webkit-border-end-width",
-        "-moz-border-end-width"
-    ],
-    "border-fit": [
-        "-webkit-border-fit"
-    ],
-    "border-horizontal-spacing": [
-        "-webkit-border-horizontal-spacing"
-    ],
-    "border-image": [
-        "-webkit-border-image"
-    ],
-    "border-radius": [
-        "-webkit-border-radius"
-    ],
-    "border-start": [
-        "-webkit-border-start",
-        "-moz-border-start"
-    ],
-    "border-start-color": [
-        "-webkit-border-start-color",
-        "-moz-border-start-color"
-    ],
-    "border-start-style": [
-        "-webkit-border-start-style",
-        "-moz-border-start-style"
-    ],
-    "border-start-width": [
-        "-webkit-border-start-width",
-        "-moz-border-start-width"
-    ],
-    "border-top-left-radius": [
-        "-webkit-border-top-left-radius"
-    ],
-    "border-top-right-radius": [
-        "-webkit-border-top-right-radius"
-    ],
-    "border-vertical-spacing": [
-        "-webkit-border-vertical-spacing"
-    ],
-    "box-align": [
-        "-webkit-box-align",
-        "-moz-box-align"
-    ],
-    "box-decoration-break": [
-        "-webkit-box-decoration-break"
-    ],
-    "box-direction": [
-        "-webkit-box-direction",
-        "-moz-box-direction"
-    ],
-    "box-flex": [
-        "-webkit-box-flex",
-        "-moz-box-flex"
-    ],
-    "box-flex-group": [
-        "-webkit-box-flex-group"
-    ],
-    "box-lines": [
-        "-webkit-box-lines"
-    ],
-    "box-ordinal-group": [
-        "-webkit-box-ordinal-group",
-        "-moz-box-ordinal-group"
-    ],
-    "box-orient": [
-        "-webkit-box-orient",
-        "-moz-box-orient"
-    ],
-    "box-pack": [
-        "-webkit-box-pack",
-        "-moz-box-pack"
-    ],
-    "box-reflect": [
-        "-webkit-box-reflect"
-    ],
-    "box-shadow": [
-        "-webkit-box-shadow"
-    ],
-    "box-sizing": [
-        "-webkit-box-sizing"
-    ],
-    "clip-path": [
-        "-webkit-clip-path"
-    ],
-    "column-break-after": [
-        "-webkit-column-break-after"
-    ],
-    "column-break-before": [
-        "-webkit-column-break-before"
-    ],
-    "column-break-inside": [
-        "-webkit-column-break-inside"
-    ],
-    "column-count": [
-        "-webkit-column-count",
-        "-moz-column-count"
-    ],
-    "column-gap": [
-        "-webkit-column-gap",
-        "-moz-column-gap"
-    ],
-    "column-rule": [
-        "-webkit-column-rule",
-        "-moz-column-rule"
-    ],
-    "column-rule-color": [
-        "-webkit-column-rule-color",
-        "-moz-column-rule-color"
-    ],
-    "column-rule-style": [
-        "-webkit-column-rule-style",
-        "-moz-column-rule-style"
-    ],
-    "column-rule-width": [
-        "-webkit-column-rule-width",
-        "-moz-column-rule-width"
-    ],
-    "column-span": [
-        "-webkit-column-span"
-    ],
-    "column-width": [
-        "-webkit-column-width",
-        "-moz-column-width"
-    ],
-    "columns": [
-        "-webkit-columns",
-        "-moz-columns"
-    ],
-    "filter": [
-        "-webkit-filter",
-        "-ms-filter"
-    ],
-    "flex": [
-        "-webkit-flex",
-        "-ms-flex"
-    ],
-    "flex-basis": [
-        "-webkit-flex-basis"
-    ],
-    "flex-direction": [
-        "-webkit-flex-direction",
-        "-ms-flex-direction"
-    ],
-    "flex-flow": [
-        "-webkit-flex-flow",
-        "-ms-flex-flow"
-    ],
-    "flex-grow": [
-        "-webkit-flex-grow"
-    ],
-    "flex-shrink": [
-        "-webkit-flex-shrink"
-    ],
-    "flex-wrap": [
-        "-webkit-flex-wrap",
-        "-ms-flex-wrap"
-    ],
-    "font-feature-settings": [
-        "-webkit-font-feature-settings",
-        "-ms-font-feature-settings"
-    ],
-    "font-size-delta": [
-        "-webkit-font-size-delta"
-    ],
-    "font-smoothing": [
-        "-webkit-font-smoothing"
-    ],
-    "highlight": [
-        "-webkit-highlight"
-    ],
-    "hyphenate-character": [
-        "-webkit-hyphenate-character"
-    ],
-    "justify-content": [
-        "-webkit-justify-content"
-    ],
-    "line-box-contain": [
-        "-webkit-line-box-contain"
-    ],
-    "line-break": [
-        "-webkit-line-break",
-        "-ms-line-break"
-    ],
-    "line-clamp": [
-        "-webkit-line-clamp"
-    ],
-    "locale": [
-        "-webkit-locale"
-    ],
-    "logical-height": [
-        "-webkit-logical-height"
-    ],
-    "logical-width": [
-        "-webkit-logical-width"
-    ],
-    "margin-after": [
-        "-webkit-margin-after"
-    ],
-    "margin-after-collapse": [
-        "-webkit-margin-after-collapse"
-    ],
-    "margin-before": [
-        "-webkit-margin-before"
-    ],
-    "margin-before-collapse": [
-        "-webkit-margin-before-collapse"
-    ],
-    "margin-bottom-collapse": [
-        "-webkit-margin-bottom-collapse"
-    ],
-    "margin-collapse": [
-        "-webkit-margin-collapse"
-    ],
-    "margin-end": [
-        "-webkit-margin-end",
-        "-moz-margin-end"
-    ],
-    "margin-start": [
-        "-webkit-margin-start",
-        "-moz-margin-start"
-    ],
-    "margin-top-collapse": [
-        "-webkit-margin-top-collapse"
-    ],
-    "mask": [
-        "-webkit-mask"
-    ],
-    "mask-box-image": [
-        "-webkit-mask-box-image"
-    ],
-    "mask-box-image-outset": [
-        "-webkit-mask-box-image-outset"
-    ],
-    "mask-box-image-repeat": [
-        "-webkit-mask-box-image-repeat"
-    ],
-    "mask-box-image-slice": [
-        "-webkit-mask-box-image-slice"
-    ],
-    "mask-box-image-source": [
-        "-webkit-mask-box-image-source"
-    ],
-    "mask-box-image-width": [
-        "-webkit-mask-box-image-width"
-    ],
-    "mask-clip": [
-        "-webkit-mask-clip"
-    ],
-    "mask-composite": [
-        "-webkit-mask-composite"
-    ],
-    "mask-image": [
-        "-webkit-mask-image"
-    ],
-    "mask-origin": [
-        "-webkit-mask-origin"
-    ],
-    "mask-position": [
-        "-webkit-mask-position"
-    ],
-    "mask-position-x": [
-        "-webkit-mask-position-x"
-    ],
-    "mask-position-y": [
-        "-webkit-mask-position-y"
-    ],
-    "mask-repeat": [
-        "-webkit-mask-repeat"
-    ],
-    "mask-repeat-x": [
-        "-webkit-mask-repeat-x"
-    ],
-    "mask-repeat-y": [
-        "-webkit-mask-repeat-y"
-    ],
-    "mask-size": [
-        "-webkit-mask-size"
-    ],
-    "max-logical-height": [
-        "-webkit-max-logical-height"
-    ],
-    "max-logical-width": [
-        "-webkit-max-logical-width"
-    ],
-    "min-logical-height": [
-        "-webkit-min-logical-height"
-    ],
-    "min-logical-width": [
-        "-webkit-min-logical-width"
-    ],
-    "opacity": [
-        "-webkit-opacity"
-    ],
-    "order": [
-        "-webkit-order"
-    ],
-    "padding-after": [
-        "-webkit-padding-after"
-    ],
-    "padding-before": [
-        "-webkit-padding-before"
-    ],
-    "padding-end": [
-        "-webkit-padding-end",
-        "-moz-padding-end"
-    ],
-    "padding-start": [
-        "-webkit-padding-start",
-        "-moz-padding-start"
-    ],
-    "perspective": [
-        "-webkit-perspective",
-        "-ms-perspective"
-    ],
-    "perspective-origin": [
-        "-webkit-perspective-origin",
-        "-ms-perspective-origin"
-    ],
-    "perspective-origin-x": [
-        "-webkit-perspective-origin-x",
-        "-ms-perspective-origin-x"
-    ],
-    "perspective-origin-y": [
-        "-webkit-perspective-origin-y",
-        "-ms-perspective-origin-y"
-    ],
-    "print-color-adjust": [
-        "-webkit-print-color-adjust"
-    ],
-    "rtl-ordering": [
-        "-webkit-rtl-ordering"
-    ],
-    "ruby-position": [
-        "-webkit-ruby-position"
-    ],
-    "shape-image-threshold": [
-        "-webkit-shape-image-threshold"
-    ],
-    "shape-margin": [
-        "-webkit-shape-margin"
-    ],
-    "shape-outside": [
-        "-webkit-shape-outside"
-    ],
-    "tap-highlight-color": [
-        "-webkit-tap-highlight-color"
-    ],
-    "text-combine": [
-        "-webkit-text-combine"
-    ],
-    "text-decorations-in-effect": [
-        "-webkit-text-decorations-in-effect"
-    ],
-    "text-emphasis": [
-        "-webkit-text-emphasis"
-    ],
-    "text-emphasis-color": [
-        "-webkit-text-emphasis-color"
-    ],
-    "text-emphasis-position": [
-        "-webkit-text-emphasis-position"
-    ],
-    "text-emphasis-style": [
-        "-webkit-text-emphasis-style"
-    ],
-    "text-fill-color": [
-        "-webkit-text-fill-color"
-    ],
-    "text-orientation": [
-        "-webkit-text-orientation"
-    ],
-    "text-security": [
-        "-webkit-text-security"
-    ],
-    "text-stroke": [
-        "-webkit-text-stroke"
-    ],
-    "text-stroke-color": [
-        "-webkit-text-stroke-color"
-    ],
-    "text-stroke-width": [
-        "-webkit-text-stroke-width"
-    ],
-    "transform": [
-        "-webkit-transform",
-        "-moz-transform",
-        "-ms-transform"
-    ],
-    "transform-origin": [
-        "-webkit-transform-origin",
-        "-ms-transform-origin"
-    ],
-    "transform-origin-x": [
-        "-webkit-transform-origin-x",
-        "-ms-transform-origin-x"
-    ],
-    "transform-origin-y": [
-        "-webkit-transform-origin-y",
-        "-ms-transform-origin-y"
-    ],
-    "transform-origin-z": [
-        "-webkit-transform-origin-z",
-        "-ms-transform-origin-z"
-    ],
-    "transform-style": [
-        "-webkit-transform-style",
-        "-ms-transform-style"
-    ],
-    "transition": [
-        "-webkit-transition",
-        "-ms-transition"
-    ],
-    "transition-delay": [
-        "-webkit-transition-delay",
-        "-ms-transition-delay"
-    ],
-    "transition-duration": [
-        "-webkit-transition-duration",
-        "-ms-transition-duration"
-    ],
-    "transition-property": [
-        "-webkit-transition-property",
-        "-ms-transition-property"
-    ],
-    "transition-timing-function": [
-        "-webkit-transition-timing-function",
-        "-ms-transition-timing-function"
-    ],
-    "user-drag": [
-        "-webkit-user-drag"
-    ],
-    "user-modify": [
-        "-webkit-user-modify",
-        "-moz-user-modify"
-    ],
-    "user-select": [
-        "-webkit-user-select",
-        "-moz-user-select",
-        "-ms-user-select"
-    ],
-    "writing-mode": [
-        "-webkit-writing-mode",
-        "-ms-writing-mode"
-    ],
-    "alt": [
-        "-webkit-alt"
-    ],
-    "animation-trigger": [
-        "-webkit-animation-trigger"
-    ],
-    "backdrop-filter": [
-        "-webkit-backdrop-filter"
-    ],
-    "color-correction": [
-        "-webkit-color-correction"
-    ],
-    "column-axis": [
-        "-webkit-column-axis"
-    ],
-    "column-fill": [
-        "-webkit-column-fill",
-        "-moz-column-fill"
-    ],
-    "column-progression": [
-        "-webkit-column-progression"
-    ],
-    "cursor-visibility": [
-        "-webkit-cursor-visibility"
-    ],
-    "dashboard-region": [
-        "-webkit-dashboard-region"
-    ],
-    "flow-from": [
-        "-webkit-flow-from",
-        "-ms-flow-from"
-    ],
-    "flow-into": [
-        "-webkit-flow-into",
-        "-ms-flow-into"
-    ],
-    "font-kerning": [
-        "-webkit-font-kerning"
-    ],
-    "font-variant-ligatures": [
-        "-webkit-font-variant-ligatures"
-    ],
-    "grid": [
-        "-webkit-grid"
-    ],
-    "grid-area": [
-        "-webkit-grid-area"
-    ],
-    "grid-auto-columns": [
-        "-webkit-grid-auto-columns"
-    ],
-    "grid-auto-flow": [
-        "-webkit-grid-auto-flow"
-    ],
-    "grid-auto-rows": [
-        "-webkit-grid-auto-rows"
-    ],
-    "grid-column": [
-        "-webkit-grid-column",
-        "-ms-grid-column"
-    ],
-    "grid-column-end": [
-        "-webkit-grid-column-end"
-    ],
-    "grid-column-gap": [
-        "-webkit-grid-column-gap"
-    ],
-    "grid-column-start": [
-        "-webkit-grid-column-start"
-    ],
-    "grid-gap": [
-        "-webkit-grid-gap"
-    ],
-    "grid-row": [
-        "-webkit-grid-row",
-        "-ms-grid-row"
-    ],
-    "grid-row-end": [
-        "-webkit-grid-row-end"
-    ],
-    "grid-row-gap": [
-        "-webkit-grid-row-gap"
-    ],
-    "grid-row-start": [
-        "-webkit-grid-row-start"
-    ],
-    "grid-template": [
-        "-webkit-grid-template"
-    ],
-    "grid-template-areas": [
-        "-webkit-grid-template-areas"
-    ],
-    "grid-template-columns": [
-        "-webkit-grid-template-columns"
-    ],
-    "grid-template-rows": [
-        "-webkit-grid-template-rows"
-    ],
-    "hyphenate-limit-after": [
-        "-webkit-hyphenate-limit-after"
-    ],
-    "hyphenate-limit-before": [
-        "-webkit-hyphenate-limit-before"
-    ],
-    "hyphenate-limit-lines": [
-        "-webkit-hyphenate-limit-lines",
-        "-ms-hyphenate-limit-lines"
-    ],
-    "hyphens": [
-        "-webkit-hyphens",
-        "-moz-hyphens",
-        "-ms-hyphens"
-    ],
-    "initial-letter": [
-        "-webkit-initial-letter"
-    ],
-    "justify-items": [
-        "-webkit-justify-items"
-    ],
-    "justify-self": [
-        "-webkit-justify-self"
-    ],
-    "line-align": [
-        "-webkit-line-align"
-    ],
-    "line-grid": [
-        "-webkit-line-grid"
-    ],
-    "line-snap": [
-        "-webkit-line-snap"
-    ],
-    "marquee": [
-        "-webkit-marquee"
-    ],
-    "marquee-direction": [
-        "-webkit-marquee-direction"
-    ],
-    "marquee-increment": [
-        "-webkit-marquee-increment"
-    ],
-    "marquee-repetition": [
-        "-webkit-marquee-repetition"
-    ],
-    "marquee-speed": [
-        "-webkit-marquee-speed"
-    ],
-    "marquee-style": [
-        "-webkit-marquee-style"
-    ],
-    "mask-source-type": [
-        "-webkit-mask-source-type"
-    ],
-    "nbsp-mode": [
-        "-webkit-nbsp-mode"
-    ],
-    "overflow-scrolling": [
-        "-webkit-overflow-scrolling"
-    ],
-    "region-break-after": [
-        "-webkit-region-break-after"
-    ],
-    "region-break-before": [
-        "-webkit-region-break-before"
-    ],
-    "region-break-inside": [
-        "-webkit-region-break-inside"
-    ],
-    "region-fragment": [
-        "-webkit-region-fragment"
-    ],
-    "scroll-snap-coordinate": [
-        "-webkit-scroll-snap-coordinate"
-    ],
-    "scroll-snap-destination": [
-        "-webkit-scroll-snap-destination"
-    ],
-    "scroll-snap-points-x": [
-        "-webkit-scroll-snap-points-x",
-        "-ms-scroll-snap-points-x"
-    ],
-    "scroll-snap-points-y": [
-        "-webkit-scroll-snap-points-y",
-        "-ms-scroll-snap-points-y"
-    ],
-    "scroll-snap-type": [
-        "-webkit-scroll-snap-type",
-        "-ms-scroll-snap-type"
-    ],
-    "svg-shadow": [
-        "-webkit-svg-shadow"
-    ],
-    "text-align-last": [
-        "-webkit-text-align-last",
-        "-moz-text-align-last",
-        "-ms-text-align-last"
-    ],
-    "text-decoration": [
-        "-webkit-text-decoration"
-    ],
-    "text-decoration-color": [
-        "-webkit-text-decoration-color",
-        "-moz-text-decoration-color"
-    ],
-    "text-decoration-line": [
-        "-webkit-text-decoration-line",
-        "-moz-text-decoration-line"
-    ],
-    "text-decoration-skip": [
-        "-webkit-text-decoration-skip"
-    ],
-    "text-decoration-style": [
-        "-webkit-text-decoration-style",
-        "-moz-text-decoration-style"
-    ],
-    "text-justify": [
-        "-webkit-text-justify",
-        "-ms-text-justify"
-    ],
-    "text-size-adjust": [
-        "-webkit-text-size-adjust",
-        "-moz-text-size-adjust",
-        "-ms-text-size-adjust"
-    ],
-    "text-underline-position": [
-        "-webkit-text-underline-position",
-        "-ms-text-underline-position"
-    ],
-    "text-zoom": [
-        "-webkit-text-zoom"
-    ],
-    "touch-callout": [
-        "-webkit-touch-callout"
-    ],
-    "binding": [
-        "-moz-binding"
-    ],
-    "border-bottom-colors": [
-        "-moz-border-bottom-colors"
-    ],
-    "border-left-colors": [
-        "-moz-border-left-colors"
-    ],
-    "border-right-colors": [
-        "-moz-border-right-colors"
-    ],
-    "border-top-colors": [
-        "-moz-border-top-colors"
-    ],
-    "control-character-visibility": [
-        "-moz-control-character-visibility"
-    ],
-    "float-edge": [
-        "-moz-float-edge"
-    ],
-    "force-broken-image-icon": [
-        "-moz-force-broken-image-icon"
-    ],
-    "image-region": [
-        "-moz-image-region"
-    ],
-    "math-display": [
-        "-moz-math-display"
-    ],
-    "math-variant": [
-        "-moz-math-variant"
-    ],
-    "min-font-size-ratio": [
-        "-moz-min-font-size-ratio"
-    ],
-    "orient": [
-        "-moz-orient"
-    ],
-    "osx-font-smoothing": [
-        "-moz-osx-font-smoothing"
-    ],
-    "outline-radius": [
-        "-moz-outline-radius"
-    ],
-    "outline-radius-bottomleft": [
-        "-moz-outline-radius-bottomleft"
-    ],
-    "outline-radius-bottomright": [
-        "-moz-outline-radius-bottomright"
-    ],
-    "outline-radius-topleft": [
-        "-moz-outline-radius-topleft"
-    ],
-    "outline-radius-topright": [
-        "-moz-outline-radius-topright"
-    ],
-    "script-level": [
-        "-moz-script-level"
-    ],
-    "script-min-size": [
-        "-moz-script-min-size"
-    ],
-    "script-size-multiplier": [
-        "-moz-script-size-multiplier"
-    ],
-    "stack-sizing": [
-        "-moz-stack-sizing"
-    ],
-    "tab-size": [
-        "-moz-tab-size"
-    ],
-    "top-layer": [
-        "-moz-top-layer"
-    ],
-    "user-focus": [
-        "-moz-user-focus"
-    ],
-    "user-input": [
-        "-moz-user-input"
-    ],
-    "window-dragging": [
-        "-moz-window-dragging"
-    ],
-    "window-shadow": [
-        "-moz-window-shadow"
-    ],
-    "accelerator": [
-        "-ms-accelerator"
-    ],
-    "background-position-x": [
-        "-ms-background-position-x"
-    ],
-    "background-position-y": [
-        "-ms-background-position-y"
-    ],
-    "behavior": [
-        "-ms-behavior"
-    ],
-    "block-progression": [
-        "-ms-block-progression"
-    ],
-    "content-zoom-chaining": [
-        "-ms-content-zoom-chaining"
-    ],
-    "content-zoom-limit": [
-        "-ms-content-zoom-limit"
-    ],
-    "content-zoom-limit-max": [
-        "-ms-content-zoom-limit-max"
-    ],
-    "content-zoom-limit-min": [
-        "-ms-content-zoom-limit-min"
-    ],
-    "content-zoom-snap": [
-        "-ms-content-zoom-snap"
-    ],
-    "content-zoom-snap-points": [
-        "-ms-content-zoom-snap-points"
-    ],
-    "content-zoom-snap-type": [
-        "-ms-content-zoom-snap-type"
-    ],
-    "content-zooming": [
-        "-ms-content-zooming"
-    ],
-    "flex-align": [
-        "-ms-flex-align"
-    ],
-    "flex-item-align": [
-        "-ms-flex-item-align"
-    ],
-    "flex-line-pack": [
-        "-ms-flex-line-pack"
-    ],
-    "flex-negative": [
-        "-ms-flex-negative"
-    ],
-    "flex-order": [
-        "-ms-flex-order"
-    ],
-    "flex-pack": [
-        "-ms-flex-pack"
-    ],
-    "flex-positive": [
-        "-ms-flex-positive"
-    ],
-    "flex-preferred-size": [
-        "-ms-flex-preferred-size"
-    ],
-    "grid-column-align": [
-        "-ms-grid-column-align"
-    ],
-    "grid-column-span": [
-        "-ms-grid-column-span"
-    ],
-    "grid-columns": [
-        "-ms-grid-columns"
-    ],
-    "grid-row-align": [
-        "-ms-grid-row-align"
-    ],
-    "grid-row-span": [
-        "-ms-grid-row-span"
-    ],
-    "grid-rows": [
-        "-ms-grid-rows"
-    ],
-    "high-contrast-adjust": [
-        "-ms-high-contrast-adjust"
-    ],
-    "hyphenate-limit-chars": [
-        "-ms-hyphenate-limit-chars"
-    ],
-    "hyphenate-limit-zone": [
-        "-ms-hyphenate-limit-zone"
-    ],
-    "ime-align": [
-        "-ms-ime-align"
-    ],
-    "ime-mode": [
-        "-ms-ime-mode"
-    ],
-    "interpolation-mode": [
-        "-ms-interpolation-mode"
-    ],
-    "layout-flow": [
-        "-ms-layout-flow"
-    ],
-    "layout-grid": [
-        "-ms-layout-grid"
-    ],
-    "layout-grid-char": [
-        "-ms-layout-grid-char"
-    ],
-    "layout-grid-line": [
-        "-ms-layout-grid-line"
-    ],
-    "layout-grid-mode": [
-        "-ms-layout-grid-mode"
-    ],
-    "layout-grid-type": [
-        "-ms-layout-grid-type"
-    ],
-    "overflow-style": [
-        "-ms-overflow-style"
-    ],
-    "overflow-x": [
-        "-ms-overflow-x"
-    ],
-    "overflow-y": [
-        "-ms-overflow-y"
-    ],
-    "scroll-chaining": [
-        "-ms-scroll-chaining"
-    ],
-    "scroll-limit": [
-        "-ms-scroll-limit"
-    ],
-    "scroll-limit-x-max": [
-        "-ms-scroll-limit-x-max"
-    ],
-    "scroll-limit-x-min": [
-        "-ms-scroll-limit-x-min"
-    ],
-    "scroll-limit-y-max": [
-        "-ms-scroll-limit-y-max"
-    ],
-    "scroll-limit-y-min": [
-        "-ms-scroll-limit-y-min"
-    ],
-    "scroll-rails": [
-        "-ms-scroll-rails"
-    ],
-    "scroll-snap-x": [
-        "-ms-scroll-snap-x"
-    ],
-    "scroll-snap-y": [
-        "-ms-scroll-snap-y"
-    ],
-    "scroll-translation": [
-        "-ms-scroll-translation"
-    ],
-    "scrollbar-3dlight-color": [
-        "-ms-scrollbar-3dlight-color"
-    ],
-    "scrollbar-arrow-color": [
-        "-ms-scrollbar-arrow-color"
-    ],
-    "scrollbar-base-color": [
-        "-ms-scrollbar-base-color"
-    ],
-    "scrollbar-darkshadow-color": [
-        "-ms-scrollbar-darkshadow-color"
-    ],
-    "scrollbar-face-color": [
-        "-ms-scrollbar-face-color"
-    ],
-    "scrollbar-highlight-color": [
-        "-ms-scrollbar-highlight-color"
-    ],
-    "scrollbar-shadow-color": [
-        "-ms-scrollbar-shadow-color"
-    ],
-    "scrollbar-track-color": [
-        "-ms-scrollbar-track-color"
-    ],
-    "text-autospace": [
-        "-ms-text-autospace"
-    ],
-    "text-combine-horizontal": [
-        "-ms-text-combine-horizontal"
-    ],
-    "text-kashida-space": [
-        "-ms-text-kashida-space"
-    ],
-    "text-overflow": [
-        "-ms-text-overflow"
-    ],
-    "touch-action": [
-        "-ms-touch-action"
-    ],
-    "touch-select": [
-        "-ms-touch-select"
-    ],
-    "word-break": [
-        "-ms-word-break"
-    ],
-    "word-wrap": [
-        "-ms-word-wrap"
-    ],
-    "wrap-flow": [
-        "-ms-wrap-flow"
-    ],
-    "wrap-margin": [
-        "-ms-wrap-margin"
-    ],
-    "wrap-through": [
-        "-ms-wrap-through"
-    ],
-    "zoom": [
-        "-ms-zoom"
-    ]
-};
-
-V.toCamel = function(str) {
-    return str.replace(/-[a-z]/g, function($1) {
-        return $1[1].toUpperCase();
-    });
-};
-
-V.fromCamel = function(str) {
-    return str.replace(/[A-Z]/g, function($1) {
-        return '-' + $1.toLowerCase();
-    });
-};
-
-V.query = function(attr) {
-    var a = V.fromCamel(attr);
-    var list;
-    if (a != attr) {
-        list = V.attrs[a] || [];
-    } else {
-        list = V.attrs[attr] || [];
-    }
-    return list;
-};
-
-module.exports = V;
-},{}],31:[function(require,module,exports){
 /**
  * The base implementation of `_.property` without support for deep paths.
  *
@@ -4566,7 +94,7 @@ function baseProperty(key) {
 
 module.exports = baseProperty;
 
-},{}],32:[function(require,module,exports){
+},{}],5:[function(require,module,exports){
 var baseProperty = require('./_baseProperty');
 
 /**
@@ -4584,7 +112,7 @@ var getLength = baseProperty('length');
 
 module.exports = getLength;
 
-},{"./_baseProperty":31}],33:[function(require,module,exports){
+},{"./_baseProperty":4}],6:[function(require,module,exports){
 (function (global){
 /**
  * @license
@@ -8514,7 +4042,7 @@ module.exports = getLength;
 }.call(this));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],34:[function(require,module,exports){
+},{}],7:[function(require,module,exports){
 var getLength = require('./_getLength'),
     isFunction = require('./isFunction'),
     isLength = require('./isLength');
@@ -8550,7 +4078,7 @@ function isArrayLike(value) {
 
 module.exports = isArrayLike;
 
-},{"./_getLength":32,"./isFunction":35,"./isLength":36}],35:[function(require,module,exports){
+},{"./_getLength":5,"./isFunction":8,"./isLength":9}],8:[function(require,module,exports){
 var isObject = require('./isObject');
 
 /** `Object#toString` result references. */
@@ -8595,7 +4123,7 @@ function isFunction(value) {
 
 module.exports = isFunction;
 
-},{"./isObject":37}],36:[function(require,module,exports){
+},{"./isObject":10}],9:[function(require,module,exports){
 /** Used as references for various `Number` constants. */
 var MAX_SAFE_INTEGER = 9007199254740991;
 
@@ -8633,7 +4161,7 @@ function isLength(value) {
 
 module.exports = isLength;
 
-},{}],37:[function(require,module,exports){
+},{}],10:[function(require,module,exports){
 /**
  * Checks if `value` is the
  * [language type](http://www.ecma-international.org/ecma-262/6.0/#sec-ecmascript-language-types)
@@ -8666,6 +4194,4525 @@ function isObject(value) {
 
 module.exports = isObject;
 
+},{}],11:[function(require,module,exports){
+/*
+ * ResultSet: Array or Element, they share the same filter/checker
+ */
+
+/**
+ * Abstract ResultSet Module
+ *
+ * @static
+ * @memberof H
+ * @type {Object}
+ */
+var ARS = {};
+
+var Mini = require('../mini');
+var H = require('./shims');
+
+ARS.modules = {};
+ARS.checkTargets = {};
+ARS.checkers = {};
+
+var MODULE = '__Module__';
+
+/**
+ * Register a ResultSet channel
+ * @param {String} identifier ResultSet channel identifier
+ * @param {Array} targets ResultSet element prototypes, should always contains Array.prototype
+ * @param {Function} valuePrechecker value validity prechecker function
+ */
+ARS.registerChannel = function(identifier, targets, valuePrechecker) {
+    ARS.modules[identifier] = {};
+    ARS.checkTargets[identifier] = targets;
+    ARS.checkers[identifier] = valuePrechecker;
+
+    Mini.arrayEach(targets || [], function(target) {
+        if (!target[MODULE]) {
+            H.addProperty(target, MODULE, Mini.hiddenProperty(MODULE));
+        }
+    });
+};
+
+/**
+ * Register ResultSet process functions.
+ *
+ * @param {String} channel channel identifier
+ * @param {String} name target function mount point
+ * @param {Function} func Checker function. This provides ability of checking content validity to target functions.
+ */
+ARS.registerChannelFunction = function(channel, name, func) {
+    /**
+     * To avoid lodash internal error. (on Object.prototype)
+     * (ResultSet member functions `filter`, `toArray` and so-on conflict with the lodash ver.)
+     * @type {*|_.noop}
+     */
+    func.push = H.noop;
+    Mini.arrayEach(ARS.checkTargets[channel] || [], function(target) {
+        if (!target[name]) {
+            H.addProperty(target, name, Mini.hiddenProperty(func));
+        }
+    });
+};
+
+/**
+ * Wrapper function generator.
+ *
+ * @param {String} identifier channel identifier
+ * @returns {wrap} wrapper function to wrap any value into specific ResultSet form
+ */
+ARS.wrapperGen = function(identifier) {
+    //assuming prototype exists
+    function transform(obj) {
+        if (obj.prototype && obj.prototype.__Module__ && obj.prototype.__Module__ !== identifier) {
+            obj.prototype.__Module__ = identifier;
+        }
+        if (obj.__proto__ && obj.__proto__.__Module__ && obj.__proto__.__Module__ !== identifier) {
+            obj.__proto__.__Module__ = identifier;
+        }
+    }
+
+    function transformArray(obj) {
+        if (Mini.isArrayLike(obj) && typeof obj != 'string') {
+            Mini.arrayEach(obj, function(son) {
+                //if input is a string, will cause infinite loop
+                if (son !== obj || typeof obj !== 'object') {
+                    transformArray(son);
+                }
+            });
+        }
+        transform(obj, identifier);
+    }
+
+    /**
+     * Wrap an object to ResultSet
+     *
+     * @static
+     * @param {Array|Object} v anything to wrap
+     * @returns {*} wrapped ResultSet object
+     */
+    function wrap(v) {
+        transformArray(v);
+        return v;
+    }
+
+    return wrap;
+};
+
+module.exports = ARS;
+},{"../mini":3,"./shims":23}],12:[function(require,module,exports){
+var A = {};
+
+/**
+ * Reads a 32bit integer from the specific offset in a Uint8Array (big or little endian)
+ *
+ * @static
+ * @memberof H
+ * @param {Uint8Array} byteView uint8array object
+ * @param {Number} [offset] byte offset
+ * @param {boolean} [littleEndian] flag of is or is not little endian
+ * @returns {Number}
+ * @example
+ *
+ * H.readInt32(uint8, 0, 1)
+ */
+A.readInt32 = function(byteView, offset, littleEndian) {
+    var a0, a1, a2, a3;
+    a0 = byteView[offset];
+    a1 = byteView[offset + 1];
+    a2 = byteView[offset + 2];
+    a3 = byteView[offset + 3];
+    if (littleEndian) {
+        a3 = (a3 << 24) >>> 0;
+        a2 = a2 << 16;
+        a1 = a1 << 8;
+    } else {
+        a0 = (a0 << 24) >>> 0;
+        a1 = a1 << 16;
+        a2 = a2 << 8;
+    }
+    return a3 + a2 + a1 + a0;
+};
+
+/**
+ * Reads a 16bit integer from the specific offset in a Uint8Array (big or little endian)
+ *
+ * @static
+ * @memberof H
+ * @param {Uint8Array} byteView uint8array object
+ * @param {Number} [offset] byte offset
+ * @param {boolean} [littleEndian] flag of is or is not little endian
+ * @returns {Number}
+ * @example
+ *
+ * H.readInt16(uint8, 0, 1)
+ */
+A.readInt16 = function(byteView, offset, littleEndian) {
+    var a0, a1;
+    a0 = byteView[offset];
+    a1 = byteView[offset + 1];
+    if (littleEndian) {
+        a1 = a1 << 8;
+    } else {
+        a0 = a0 << 8
+    }
+    return a0 + a1;
+};
+
+var native = new Int8Array(new Int16Array([1]).buffer)[0] == 1;
+/**
+ * Reads a 32bit float from the specific offset in a Uint8Array (big or little endian)
+ *
+ * @static
+ * @memberof H
+ * @param {Uint8Array} byteView uint8array object
+ * @param {Number} [offset] byte offset
+ * @param {boolean} [littleEndian] flag of is or is not little endian
+ * @returns {Number}
+ * @example
+ *
+ * H.readFloat32(uint8, 0, 1)
+ */
+A.readFloat32 = function(byteView, offset, littleEndian) {
+    var b0, b1, b2, b3, tb1;
+    var sign, exponent, mantissa;
+    if (littleEndian === undefined) littleEndian = native;
+
+    if (littleEndian) {
+        b0 = byteView[offset + 3];
+        b1 = byteView[offset + 2];
+        b2 = byteView[offset + 1];
+        b3 = byteView[offset];
+    } else {
+        b0 = byteView[offset];
+        b1 = byteView[offset + 1];
+        b2 = byteView[offset + 2];
+        b3 = byteView[offset + 3];
+    }
+
+    //to prevent gc
+    tb1 = b0 >> 7;
+    sign = 1 - (2 * tb1);
+
+    b0 = b0 << 1;
+    tb1 = b1 >> 7;
+    b0 = (b0 & 0xff);
+    exponent = (b0 | tb1) - 127;
+
+    tb1 = b1 & 0x7f;
+    tb1 = tb1 << 16;
+    b2 = b2 << 8;
+    mantissa = tb1 | b2 | b3;
+
+    if (exponent === 128) {
+        if (mantissa !== 0) {
+            return NaN;
+        } else {
+            return sign * Infinity;
+        }
+    }
+
+    if (exponent === -127) { // Denormalized
+        return sign * mantissa * Math.pow(2, -126 - 23);
+    }
+
+    return sign * (1 + mantissa * Math.pow(2, -23)) * Math.pow(2, exponent);
+};
+
+module.exports = A;
+
+},{}],13:[function(require,module,exports){
+var C = require('./detect');
+
+/*
+ * Cef Interactions
+ */
+//noinspection JSUnresolvedVariable
+var cefQuery = C.root.cefQuery || function() {
+        if (this.debug) console.log(arguments[0]);
+    };
+
+/**
+ * Call Cef
+ *
+ * @static
+ * @memberof H
+ * @param {string} [req] request string
+ * @param {boolean} [persistent]
+ * @param {Function} [onsuccess] success callback
+ * @param {Function} [onfailure] failed callback
+ * @returns {undefined}
+ * @example
+ *
+ * H.callCef("selectItem:1", false, H.noop(), H.noop())
+ */
+C.callCef = function(req, persistent, onsuccess, onfailure) {
+    return cefQuery({
+        request: req || "",
+        persistent: !!persistent,
+        onSuccess: onsuccess || function(response) {},
+        onFailure: onfailure || function(err_code, err_msg) {}
+    })
+};
+
+module.exports = C;
+
+},{"./detect":15}],14:[function(require,module,exports){
+var _ = require('lodash/core');
+
+require('./raf');
+
+var Detect = require('./detect');
+var StackTrace = require('./stacktrace');
+var ArrayBufferOp = require('./arraybuffer');
+var CefInteractions = require('./cef_interactions');
+var Maths = require('./math');
+var Objects = require('./object');
+var Storage = require('./storage');
+var Tester = require('./testers');
+var UrlUtils = require('./urlutils');
+var Uuids = require('./uuid');
+var Events = require('./event');
+// var Iterator = require('./iterator');
+var Shims = require('./shims');
+var ARS = require('./abstractresultset');
+var RS = require('./resultset');
+
+var C = {};
+
+C.__isRoot__ = true;
+
+_.extend(C, _);
+_.extend(C, Detect);
+_.extend(C, StackTrace);
+_.extend(C, ArrayBufferOp);
+_.extend(C, CefInteractions);
+_.extend(C, Maths);
+_.extend(C, Objects);
+_.extend(C, Storage);
+_.extend(C, Tester);
+_.extend(C, UrlUtils);
+_.extend(C, Uuids);
+_.extend(C, Events);
+// _.extend(C, Iterator);
+_.extend(C, Shims);
+_.extend(C, RS);
+
+C.abstraceResultSet = ARS;
+
+C.noop = function() {
+    return function() {};
+};
+
+C.now = Date.now;
+
+/*
+ * jQuery Shim
+ */
+//noinspection JSUnresolvedVariable
+if (C.root.jQuery) {
+    //noinspection JSUnresolvedVariable,JSUnusedGlobalSymbols
+    C.root.jQuery.fn.extend({
+        slideLeftHide: function( speed, callback ) {
+            //noinspection JSUnresolvedFunction
+            this.animate( {
+                width: "hide",
+                paddingLeft: "hide",
+                paddingRight: "hide",
+                marginLeft: "hide",
+                marginRight: "hide"
+            }, speed, callback);
+        },
+        slideLeftShow: function( speed, callback ) {
+            //noinspection JSUnresolvedFunction
+            this.animate( {
+                width: "show",
+                paddingLeft: "show",
+                paddingRight: "show",
+                marginLeft: "show",
+                marginRight: "show"
+            }, speed, callback);
+        }
+    });
+}
+
+//noinspection JSUnusedGlobalSymbols
+C.extend(String.prototype, {
+    replaceAll: function(s1,s2){
+        return this.replace(new RegExp(s1,"gm"),s2);
+    }
+});
+
+/**
+ * Produce a random string in a fixed size. Output size is 16 by default.
+ *
+ * @static
+ * @memberof H
+ * @param {Number} [size] length of target string
+ * @returns {string}
+ */
+C.nonceStr = function(size) {
+    var s = "";
+    var c = "0123456789qwertyuiopasdfghjklzxcvbnm";
+    for (var i = 0; i < size || 16; i++) {
+        s += c[parseInt(36 * Math.random())];
+    }
+    return s;
+};
+
+/**
+ * Clear timer
+ *
+ * @static
+ * @memberof H
+ * @param timer timer to clear
+ */
+C.clearTimer = function(timer) {
+    if (timer) {
+        clearInterval(timer);
+    }
+};
+
+module.exports = C;
+
+},{"./abstractresultset":11,"./arraybuffer":12,"./cef_interactions":13,"./detect":15,"./event":17,"./math":19,"./object":20,"./raf":21,"./resultset":22,"./shims":23,"./stacktrace":24,"./storage":25,"./testers":26,"./urlutils":27,"./uuid":28,"lodash/core":6}],15:[function(require,module,exports){
+/*
+ * Env Detection Module
+ */
+
+var C = {};
+
+C.__isRoot__ = true;
+
+C.__name = '$H';
+
+C.isArrayLike = require('lodash/isArrayLike');
+
+/**
+ * Check if a value can be parsed to an integer
+ *
+ * @static
+ * @memberof H
+ * @param {*} i value to be checked
+ * @returns {boolean}
+ */
+C.isInteger = function(i) {
+    return  /^-?\d+$/.test(i + "") || /^(-?\d+)e(\d+)$/.test(i + "");
+};
+
+/**
+ * Checks if a value can be parsed into a float.
+ *
+ * @static
+ * @memberof H
+ * @param {*} v value to be checked
+ * @returns {boolean}
+ */
+C.isFloat = function(v) {
+    return /^(-?\d+)(\.\d+)?$/.test(v + "") || /^(-?\d+)(\.\d+)?e(-?\d+)$/.test(v + "");
+};
+
+var processObj = undefined;
+
+try {
+    processObj = eval('process');
+} catch (e) {}
+
+/**
+ * Flag of is in node.js environment or not.
+ *
+ * @static
+ * @memberof H
+ * @type {boolean}
+ */
+C.isNodejs = 'object' === typeof processObj && Object.prototype.toString.call(processObj) === '[object process]';
+
+C.root = {};
+
+try {
+    //noinspection JSUnresolvedVariable
+    C.root = GLOBAL;
+} catch (e) {
+    C.root = window;
+}
+
+C.root.__catching = false;
+
+C.__catching = false;
+
+//noinspection JSUnresolvedVariable
+// C.root = C.isNodejs ? GLOBAL : window;
+
+//noinspection JSUnresolvedVariable
+var root = C.root;
+
+//noinspection JSUnresolvedVariable
+root.navigator = root.navigator || {userAgent: ""};
+
+C.root = root;
+
+/**
+ * Get IE version.
+ * Returns 0 in non-IE environment.
+ *
+ * @static
+ * @memberof H
+ * @returns {number}
+ */
+C.getIE = function() {
+    var MSIEs = navigator.userAgent.split('MSIE ')[1] || "0";
+    var DNETs = navigator.userAgent.split('rv:')[1] || "0";
+
+    MSIEs = MSIEs.split(".")[0];
+    DNETs = DNETs.split(".")[0];
+
+    var msie = ~~MSIEs;
+    var dnet = ~~DNETs;
+
+    if (msie != 0) {
+        return msie;
+    }
+    if (dnet != 0) {
+        return dnet;
+    }
+
+    return 0;
+};
+
+/**
+ * Check if is in IE or is in a specified version of IE.
+ *
+ * @static
+ * @memberof H
+ * @param {Number} [v] version to check
+ * @returns {boolean}
+ */
+C.isIE = function(v) {
+    if (v !== undefined) {
+        return C.getIE() == v;
+    } else {
+        return C.getIE() !== 0;
+    }
+};
+
+/**
+ * Flag of is in IE.
+ *
+ * @static
+ * @memberof H
+ * @type {boolean}
+ */
+C.likeIE = !!C.getIE();
+
+/**
+ * Flag of is in browsers on iPhone.
+ *
+ * @static
+ * @memberof H
+ * @type {boolean}
+ */
+C.isiPhone = navigator.userAgent.indexOf('iPhone') !== -1;
+
+/**
+ * Flag of is in browsers of Lollipop systems
+ * @type {boolean}
+ */
+C.isLollipop = navigator.userAgent.indexOf('Android 5.') !== -1;
+
+//root.hasOwnProperty shims
+if (!root.hasOwnProperty) {
+    root.hasOwnProperty = function(p) {
+        //Note: in IE<9, p cannot be a function (for window)
+        return !!root[p];
+    };
+}
+
+/**
+ * Check if canvas drawing is supported in current browser.
+ *
+ * @static
+ * @memberof H
+ * @returns {boolean}
+ */
+C.isCanvasSupported = function () {
+    if (C.isNodejs) return false;
+    var canvas = document.createElement('canvas');
+    return root.hasOwnProperty("__cv") ? root.__cv : root.__cv = !!(canvas.getContext && canvas.getContext('2d'));
+};
+
+/**
+ * Check if webgl drawing is supported in current browser.
+ *
+ * @static
+ * @memberof H
+ * @returns {boolean}
+ */
+C.isWebGLSupported = function () {
+    if (C.isNodejs) return false;
+    var canvas = document.createElement('canvas');
+    return root.hasOwnProperty("__gl") ? root.__gl : root.__gl = !!(root['WebGLRenderingContext'] && canvas.getContext('webgl'));
+};
+
+// C.isCanvasSupported();
+// C.isWebGLSupported();
+
+/**
+ * Language string
+ *
+ * @static
+ * @memberof H
+ * @type {string}
+ */
+C.language = C.isNodejs ? "" : (navigator.language || navigator['browserLanguage'] || "").toLowerCase();
+
+module.exports = C;
+
+},{"lodash/isArrayLike":7}],16:[function(require,module,exports){
+/*
+ * String Encoding
+ * Binary Operation
+ * String Convertion
+ */
+var ES = {};
+
+/*
+ * Possible input
+ *
+ * 1 ArrayBuffer of raw data bytes
+ * 2 Array of raw data bytes
+ * 3 Array of char codes (UTF-16)
+ * 4 Raw data string
+ * 5 Unicode String
+ *
+ * Possible output
+ *
+ * 1 ArrayBuffer of raw data bytes
+ * 2 Array of raw data bytes
+ * 3 Array of char codes (UTF-16)
+ * 4 String of raw data
+ * 5 Unicode String
+ */
+
+var B10000000 = 0x80;
+var B11000000 = 0xC0;
+var B11100000 = 0xE0;
+var B11110000 = 0xF0;
+var B11111000 = 0xF8;
+var B11111100 = 0xFC;
+//noinspection JSUnusedLocalSymbols
+var B11111110 = 0xFE;
+var B00000001 = 0x01;
+var B00000011 = 0x03;
+var B00000111 = 0x07;
+var B00001111 = 0x0F;
+var B00011111 = 0x1F;
+var B00111111 = 0x3F;
+//noinspection JSUnusedLocalSymbols
+var B01111111 = 0x7F;
+var B11111111 = 0xFF;
+
+/*
+ * Used for ArrayBuffer extension
+ */
+//function allocByteArray(length, isBuffer) {
+//    if (isBuffer) {
+//        return new Int8Array(length);
+//    } else {
+//        return new Array(length);
+//    }
+//}
+//
+//function allocIntArray(length, isBuffer) {
+//    if (isBuffer) {
+//        return new Int32Array(length);
+//    } else {
+//        return new Array(length);
+//    }
+//}
+
+/**
+ * Unicode Int Array -> Unicode String
+ *
+ * @static
+ * @memberof H
+ * @param {Array|ArrayBuffer|Uint8Array} ar unicode int array or arraybuffer
+ * @returns {string} unicode string
+ */
+function unicodeIntArrayToString(ar) {
+    if (ar instanceof ArrayBuffer) {
+        ar = new Uint8Array(ar);
+    }
+    var result = "";
+    var l = ar.byteLength || ar.length;
+    var length = ar.byteLength || ar.length;
+    for (l += 1; --l;) {
+        result += String.fromCharCode(ar[length - l]);
+    }
+    return result;
+}
+
+/**
+ * Unicode String -> Unicode Int Array
+ *
+ * @static
+ * @memberof H
+ * @param {String} str unicode string (including ascii string)
+ * @returns {Array} unicode int array
+ */
+function stringToUnicodeIntArray(str) {
+    var length = str.length;
+    var result = new Array(length);
+    for (length += 1; --length;) {
+        result[length - 1] = str.charCodeAt(length - 1);
+    }
+    return result;
+}
+
+/**
+ * Utf16 String -> Byte Array (represented in UTF-8)
+ *
+ * @static
+ * @memberof H
+ * @param {String} str unicode string
+ * @returns {Array} utf-8 byte array
+ */
+function stringToUtf8ByteArray(str) {
+    var out = [], l = str.length;
+    var n = str.length;
+    for (l++; --l;) {
+        var i = n - l;
+        var c = str.charCodeAt(i);
+        if (c < 0x80) {
+            out[out.length] = c;
+        } else if (c < 0x800) {
+            out[out.length] = 0xc0 | (c >> 6);
+            out[out.length] = 0x80 | (c & 0x3f);
+        } else if (c < 0xd800 || c >= 0xe000) {
+            out[out.length] = 0xe0 | (c >> 12);
+            out[out.length] = 0x80 | ((c >> 6) & 0x3f);
+            out[out.length] = 0x80 | (c & 0x3f);
+        } else {
+            // surrogate pair
+            --l;
+            // UTF-16 encodes 0x10000-0x10FFFF by
+            // subtracting 0x10000 and splitting the
+            // 20 bits of 0x0-0xFFFFF into two halves
+            c = 0x10000 + (((c & 0x3ff) << 10)
+                | (str.charCodeAt(i) & 0x3ff));
+            out[out.length] = 0xf0 | (c >> 18);
+            out[out.length] = 0x80 | ((c >> 12) & 0x3f);
+            out[out.length] = 0x80 | ((c >> 6) & 0x3f);
+            out[out.length] = 0x80 | (c & 0x3f);
+        }
+    }
+    return out;
+}
+
+/**
+ * Utf16 String -> ArrayBuffer (Uint8Array) representing UTF-8
+ *
+ * @static
+ * @memberof H
+ * @param {String} str utf-16 string
+ * @return {Uint8Array} utf-8 arraybuffer
+ */
+function stringToArrayBuffer(str) {
+    var byteLength = str.length * 3;
+    var isString = typeof str == 'string';
+    var out = new Uint8Array(byteLength);
+    var pc = 0;
+    for (var i = 0; i < str.length; i++) {
+        var c = isString ? str.charCodeAt(i) : str[i];
+        if (c < 0x80) {
+            out[out.length] = c;
+            pc++;
+        } else if (c < 0x800) {
+            out[out.length] = 0xc0 | (c >> 6);
+            out[out.length] = 0x80 | (c & 0x3f);
+            pc += 2;
+        } else if (c < 0xd800 || c >= 0xe000) {
+            out[out.length] = 0xe0 | (c >> 12);
+            out[out.length] = 0x80 | ((c >> 6) & 0x3f);
+            out[out.length] = 0x80 | (c & 0x3f);
+            pc += 3;
+        } else {
+            // surrogate pair
+            --l;
+            // UTF-16 encodes 0x10000-0x10FFFF by
+            // subtracting 0x10000 and splitting the
+            // 20 bits of 0x0-0xFFFFF into two halves
+            c = 0x10000 + (((c & 0x3ff)<<10) | (c & 0x3ff));
+            out[out.length] = 0xf0 | (c >> 18);
+            out[out.length] = 0x80 | ((c >> 12) & 0x3f);
+            out[out.length] = 0x80 | ((c >> 6) & 0x3f);
+            out[out.length] = 0x80 | (c & 0x3f);
+            pc += 4;
+        }
+    }
+    if (ArrayBuffer.prototype.slice) {
+        return out.slice(0, pc);
+    } else {
+        var output = new Uint8Array(pc);
+        for (var j = 0; j < pc; j++) {
+            output[j] = out[j];
+        }
+        return output;
+    }
+}
+
+/**
+ * Utf16 Array -> ArrayBuffer (Uint8Array) (in UTF-8)
+ * @type {stringToArrayBuffer}
+ */
+var utf16ArrayToArrayBuffer = stringToArrayBuffer;
+
+/**
+ * Byte Array (UTF-8) -> Unicode String
+ * Uint8Array (UTF-8) -> Unicode String **bug here**
+ *
+ * @static
+ * @memberof H
+ * @param {Array|ArrayBuffer|Uint8Array} data byte array or uint8array in UTF-8 encoding
+ * @returns {string} unicode string
+ */
+function utf8ByteArrayToUnicodeString(data) { // array of bytes
+    if (data instanceof ArrayBuffer) {
+        data = new Uint8Array(data);
+    }
+    var str = '',
+        i, l = data.byteLength || data.length, s = data.byteLength || data.length;
+
+    for (l++; --l;) {
+        i = s - l;
+        if (l < 0) break;
+        var value = data[i];
+
+        //accept Unicode char code also
+        if (value < 0x80 || value > 0xFF) {
+            str += String.fromCharCode(value);
+        } else if (value > 0xBF && value < 0xE0) {
+            str += String.fromCharCode((value & 0x1F) << 6 | data[i + 1] & 0x3F);
+            --l;
+        } else if (value > 0xDF && value < 0xF0) {
+            str += String.fromCharCode((value & 0x0F) << 12 | (data[i + 1] & 0x3F) << 6 | data[i + 2] & 0x3F);
+            l -= 2;
+        } else if (value < 0x100) {
+            // surrogate pair
+            var charCode = ((value & 0x07) << 18 | (data[i + 1] & 0x3F) << 12 | (data[i + 2] & 0x3F) << 6 | data[i + 3] & 0x3F) - 0x010000;
+
+            str += String.fromCharCode(charCode >> 10 | 0xD800, charCode & 0x03FF | 0xDC00);
+            l -= 3;
+        }
+    }
+
+    return str;
+}
+
+/**
+ * Byte Array (UTF-8 representation) -> Int Array (UTF-16 representation)
+ * Uint8Array (UTF-8 representation) -> Int Array (UTF-16 representation)
+ *
+ * @static
+ * @memberof H
+ * @param {Array|Uint8Array|ArrayBuffer} arr byte array in UTF-8 encoding
+ * @return {Array} utf-16 int array
+ */
+function byteArrayToUtf16Array(arr) {
+    var used = 0;
+    var l;
+    var length = l = (arr.byteLength || arr.length), i, t, byteCount, rev;
+    for (l += 1;--l;) {
+        rev = 0;
+        i = length - l;
+        t = arr[i];
+        if (t < B10000000) {
+            byteCount = 0;
+            rev = B11111111;
+        } else if (t < B11000000) {
+            //will not happen
+            byteCount = 0;
+            rev = B11111111;
+        } else if (t < B11100000) {
+            //U-00000080 - U-000007FF: 110xxxxx 10xxxxxx
+            byteCount = 1;
+            rev = B00011111;
+        } else if (t < B11110000) {
+            //U-00000800 - U-0000FFFF: 1110xxxx 10xxxxxx 10xxxxxx
+            byteCount = 2;
+            rev = B00001111;
+        } else if (t < B11111000) {
+            //U-00010000 - U-001FFFFF: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
+            byteCount = 3;
+            rev = B00000111;
+        }
+        //NOTE: 4 and 5 are not safe, cuz `<<` operation is over 32bit (int)
+        //NOTE: javascript byte operations use int(32bit)
+        else if (t < B11111100) {
+            //U-00200000 - U-03FFFFFF: 111110xx 10xxxxxx 10xxxxxx 10xxxxxx 10xxxxxx
+            byteCount = 4;
+            rev = B00000011;
+        } else {
+            //U-04000000 - U-7FFFFFFF: 1111110x 10xxxxxx 10xxxxxx 10xxxxxx 10xxxxxx 10xxxxxx
+            byteCount = 5;
+            rev = B00000001;
+        }
+
+        var allc = byteCount;
+        var result = 0;
+        if (byteCount) {
+            for (byteCount += 1; --byteCount;) {
+                //byteCount: bc -> 1
+                result += ((arr[i + byteCount] & B00111111) << (6 * (allc - byteCount)));
+            }
+        }
+        result |= (t & rev) << (allc * 6);
+        arr[used++] = result;
+        l -= allc;
+        if (l <= 0) {
+            break;
+        }
+    }
+    arr.length = used;
+    return arr;
+}
+
+/**
+ * UTF-16 Int Array -> Byte Array (representing UTF-8 chars)
+ *
+ * @static
+ * @memberof H
+ * @param {Array} ia utf-16 int array
+ * @returns {Array} utf-8 byte array
+ */
+function utf16ArrayToByteArray(ia) {
+    var out = [];
+    for (var i = 0; i < ia.length; i++) {
+        var c = ia[i];
+        if (c < 0x80) {
+            out[out.length] = c;
+        } else if (c < 0x800) {
+            out[out.length] = 0xc0 | (c >> 6);
+            out[out.length] = 0x80 | (c & 0x3f);
+        } else if (c < 0xd800 || c >= 0xe000) {
+            out[out.length] = 0xe0 | (c >> 12);
+            out[out.length] = 0x80 | ((c >> 6) & 0x3f);
+            out[out.length] = 0x80 | (c & 0x3f);
+        } else {
+            // surrogate pair
+            // UTF-16 encodes 0x10000-0x10FFFF by
+            // subtracting 0x10000 and splitting the
+            // 20 bits of 0x0-0xFFFFF into two halves
+            c = 0x10000 + (((c & 0x3ff) << 10)
+                | (ia[i] & 0x3ff));
+            out[out.length] = 0xf0 | (c >> 18);
+            out[out.length] = 0x80 | ((c >> 12) & 0x3f);
+            out[out.length] = 0x80 | ((c >> 6) & 0x3f);
+            out[out.length] = 0x80 | (c & 0x3f);
+            i++;
+        }
+    }
+    return out;
+}
+
+/**
+ * ASCII String of UTF-8 Byte Array -> Unicode String
+ *
+ * @static
+ * @memberof H
+ * @param {String} str ascii string of utf-8 byte array
+ * @returns {string} unicode string in utf-16 encoding
+ */
+function utf8ByteStringToUnicodeString(str) {
+    //bs -> ba
+    //ba -> us
+    return utf8ByteArrayToUnicodeString(stringToUnicodeIntArray(str));
+}
+
+/**
+ * Unicode String -> ASCII String of UTF-8 Byte Array
+ *
+ * @static
+ * @memberof H
+ * @param {String} str unicode string
+ * @return {String} ascii string of utf-8 encoded byte array
+ */
+function unicodeStringToUtf8ByteString(str) {
+    //us -> ba
+    //ba -> s
+    return unicodeIntArrayToString(stringToUtf8ByteArray(str));
+}
+
+/**
+ * Raw String (UTF-8 Bytes) -> Uint8Array
+ * no validality check
+ *
+ * @static
+ * @memberof H
+ * @param {String} str ascii string in utf-8 encoding
+ * @return {Uint8Array} result arraybuffer
+ */
+function utf8ByteStringToUint8Array(str) {
+    var length = str.length;
+    var out = new Uint8Array(length);
+    for (var i = 0; i < length; i++) {
+        out[i] = str.charCodeAt(i);
+    }
+    return out;
+}
+
+/*
+ * `Binary String` is the binary representation of a number
+ */
+
+/**
+ * Decimal String -> Binary String
+ *
+ * @static
+ * @memberof H
+ * @param {String} d string of decimal number
+ * @returns {string} string of binary representation of the specific number
+ */
+function numberToBinaryString(d) {
+    return Number(d).toString(2);
+}
+
+//noinspection JSUnusedLocalSymbols
+/**
+ * String (might be byte string) -> Unicode string
+ * but much (1x) slower than E.ba2s(E.s2a())
+ *
+ * @private
+ * @deprecated
+ * @param {String} str unicode string
+ * @returns {string} utf8 string
+ */
+function strintToUtf8String(str) {
+    //noinspection JSDeprecatedSymbols
+    return decodeURIComponent(escape(str));
+}
+
+function hex(i) {
+    if (!i) return "??";
+    return ("00" + (i & 0xff).toString(16)).slice(-2);
+}
+
+/**
+ * Get a well-printed JSON string
+ *
+ * @static
+ * @memberof H
+ * @param {Object} jsonObject json object to encode
+ */
+ES.getPrettyJson = function(jsonObject) {
+    return JSON.stringify(jsonObject, null, "\t");
+};
+
+/**
+ * Alias of H.numberToBinaryString
+ *
+ * @static
+ * @memberof H
+ * @type {H.numberToBinaryString}
+ */
+ES.n2bin = numberToBinaryString;
+/**
+ * Get the hex representation string of a number (less than 256/0xFF)
+ *
+ * @static
+ * @memberof H
+ * @param {Number} i
+ * @returns {String} hex string
+ */
+ES.hex = hex;
+
+//3-5, 5-3; 3-4, 4-3; 1-4
+//Array of charcode <-> Unicode String
+/**
+ * ArrayBuffer to ByteString
+ * UnicodeIntArray to UnicodeString
+ *
+ * @static
+ * @memberof H
+ * @type {H.unicodeIntArrayToString}
+ */
+ES.ab2bs = ES.ua2s = unicodeIntArrayToString;
+/**
+ * UnicodeString to UnicodeIntArray
+ *
+ * @static
+ * @memberof H
+ * @type {H.stringToUnicodeIntArray}
+ */
+ES.s2ua = stringToUnicodeIntArray;
+
+//4-5, 5-4
+//Raw data string <-> Unicode String
+/**
+ * UnicodeString to AsciiByteString
+ *
+ * @static
+ * @memberof H
+ * @type {H.unicodeStringToUtf8ByteString}
+ */
+ES.us2bs = unicodeStringToUtf8ByteString;
+/**
+ * Utf-8 ByteString to UnicodeString
+ * @type {H.utf8ByteStringToUnicodeString}
+ */
+ES.bs2us = utf8ByteStringToUnicodeString;
+
+//2-5, 5-2; 2-4, 4-2; ?, 1-5
+//Unicode String <-> Array of raw data bytes
+/**
+ * Unicode String to ByteArray
+ *
+ * @static
+ * @memberof H
+ * @type {H.stringToUtf8ByteArray}
+ */
+ES.s2ba = stringToUtf8ByteArray; //str to binary arr (utf8)
+/**
+ * ByteArray to UnicodeString
+ * ArrayBuffer to UnicodeString
+ *
+ * @static
+ * @memberof H
+ * @type {H.utf8ByteArrayToUnicodeString}
+ */
+ES.ab2s = ES.ba2s = utf8ByteArrayToUnicodeString; //binary arr (utf8) to str
+
+//2-3, 3-2; 1-3
+/**
+ * ByteArray to Utf16IntArray
+ *
+ * @static
+ * @memberof H
+ * @type {H.byteArrayToUtf16Array}
+ */
+ES.ba2ia = byteArrayToUtf16Array; //binary array to int array
+/**
+ * Utf16IntArray to ByteArray
+ *
+ * @static
+ * @memberof H
+ * @type {H.utf16ArrayToByteArray}
+ */
+ES.ia2ba = utf16ArrayToByteArray;
+
+//meaningless: 1-2, 2-1
+
+//4-1
+/**
+ * AsciiByteString to ArrayBuffer
+ *
+ * @static
+ * @memberof H
+ * @type {H.utf8ByteStringToUint8Array}
+ */
+ES.bs2ab = utf8ByteStringToUint8Array;
+//5-1
+/**
+ * UnicodeString to ArrayBuffer(Uint8Array)
+ *
+ * @static
+ * @memberof H
+ * @type {H.stringToArrayBuffer}
+ */
+ES.s2ab = stringToArrayBuffer;
+//3-1
+/**
+ * IntArray to ArrayBuffer
+ *
+ * @static
+ * @memberof H
+ * @type {stringToArrayBuffer}
+ */
+ES.a2ab = utf16ArrayToArrayBuffer;
+
+//aliases
+/**
+ * Unicode CharArray to String, alias of H.ua2s
+ *
+ * @static
+ * @memberof H
+ * @type {*|unicodeIntArrayToString}
+ */
+ES.a2s = ES.ua2s; //unicode char array to str
+/**
+ * UnicodeString to UnicodeIntArray
+ *
+ * @static
+ * @memberof H
+ * @type {*|stringToUnicodeIntArray}
+ */
+ES.s2a = ES.s2ua; //str to unicode char array
+
+/**
+ * ByteArray to UnicodeIntArray, alias of E.ba2ia
+ * @type {*|byteArrayToUtf16Array}
+ */
+ES.ba2ua = ES.ba2ia; //alias
+
+/**
+ * String to UnicodeString
+ *
+ * @static
+ * @memberof H|E
+ * @type {H.utf8ByteStringToUnicodeString}
+ */
+ES.s2us = ES.bs2us;
+
+module.exports = ES;
+
+},{}],17:[function(require,module,exports){
+/*
+ * Custom Event Manipulation Module
+ */
+
+var E = {};
+
+var H = require('./uuid');
+var C = require('./iterator');
+
+/**
+ * DOM event operators.
+ *
+ * @static
+ * @memberof H
+ * @type {{addHandler: E.Event.addHandler, removeHandler: E.Event.removeHandler}}
+ */
+E.Event = {
+    /**
+     * Add event handler
+     *
+     * @static
+     * @memberof H.Event
+     * @param {Element} oElement DOM element
+     * @param {String} sEvent event name
+     * @param {Function} fnHandler event handler
+     */
+    addHandler: function (oElement, sEvent, fnHandler) {
+        sEvent[0] = sEvent[0].toUpperCase();
+        oElement.addEventListener ? oElement.addEventListener(sEvent, fnHandler, false) : oElement.attachEvent("on" + sEvent, fnHandler)
+    },
+    /**
+     * Remove event handler from dom element
+     *
+     * @static
+     * @memberof H.Event
+     * @param {Element} oElement DOM element
+     * @param {String} sEvent event name
+     * @param {Function} fnHandler event handler
+     */
+    removeHandler: function (oElement, sEvent, fnHandler) {
+        sEvent[0] = sEvent[0].toUpperCase();
+        oElement.removeEventListener ? oElement.removeEventListener(sEvent, fnHandler, false) : oElement.detachEvent("on" + sEvent, fnHandler);
+        sEvent[0] = sEvent[0].toLowerCase();
+        oElement.removeEventListener ? oElement.removeEventListener(sEvent, fnHandler, false) : oElement.detachEvent("on" + sEvent, fnHandler);
+    }
+};
+
+/**
+ * EventDispatcher
+ *
+ * @static
+ * @memberof H
+ * @returns {{listeners: {}, attachListener: H.EventDispatcher.attachListener, fire: H.EventDispatcher.fire, removeListener: H.EventDispatcher.removeListener, clearListener: H.EventDispatcher.clearListener}}
+ * @constructor
+ */
+E.EventDispatcher = function() {
+    return {
+        listeners: {},
+        /**
+         * Attach an listener listening on a channel
+         *
+         * @static
+         * @memberof H.EventDispatcher
+         * @param {String} key channel to listen
+         * @param {Function} cb listener body
+         * @returns {String} UUID String, listener identifier
+         */
+        attachListener: function(key, cb) {
+            this.listeners[key] = this.listeners[key] || {};
+            //noinspection JSUnresolvedVariable
+            cb.uuid = cb.uuid || H.fastUuid();
+            //noinspection JSUnresolvedVariable
+            this.listeners[key][cb.uuid] = cb;
+            //noinspection JSUnresolvedVariable
+            return cb.uuid;
+        },
+        /**
+         * Fire event at a channel now
+         *
+         * @static
+         * @memberof H.EventDispatcher
+         * @param {String} key event channel key to fire
+         * @param {*} [data] optional data to append
+         */
+        fire: function(key, data) {
+            if (this.listeners[key]) {
+                C.each(this.listeners[key], function(cb) {
+                    //noinspection JSUnresolvedVariable
+                    if (cb && typeof cb === 'function' && !cb.blocked) {
+                        try {
+                            cb(data);
+                        }catch(e) {
+                            console.log(e)
+                        }
+                    }
+                });
+            }
+        },
+        /**
+         * Remove a listener from a channel.
+         *
+         * @static
+         * @memberof H.EventDispatcher
+         * @param {String} key channel name
+         * @param {Function} func listener body
+         */
+        removeListener: function(key, func) {
+            if (this.listeners[key]) {
+                this.listeners[key] = C.each(this.listeners[key], function(listener) {
+                    //noinspection JSUnresolvedVariable
+                    if (listener.uuid !== func.uuid) return listener;
+                }).merge();
+            }
+        },
+        /**
+         * Clear all listeners on a channel
+         *
+         * @static
+         * @memberof H.EventDispatcher
+         * @param {String} key channel key to clear
+         */
+        clearListener: function(key) {
+            this.listeners[key] = undefined;
+            delete this.listeners[key];
+        }
+    };
+};
+
+module.exports = E;
+
+},{"./iterator":18,"./uuid":28}],18:[function(require,module,exports){
+/*
+ * Iterator Logic Module
+ */
+var C = require('lodash/core');
+var Mini = require('../mini');
+var E = require('./stacktrace');
+var D = require('./detect');
+
+var I = function(template) {
+    I.template = template || I.resultWrapper;
+    return I;
+};
+
+/**
+ * Set the default result template.
+ * A result template will be used to produce a result object according to the input value.
+ *
+ * @static
+ * @param {Function} template
+ * @returns {I}
+ * @constructor
+ */
+I.setTemplate = function(template) {
+    I.template = template || I.resultWrapper;
+    return I;
+};
+
+/*
+ * @private
+ *
+ * returns a template object for the input value
+ */
+I.resultWrapper = function(v) {
+    if (I.template !== undefined) return I.template(v);
+    return (v === undefined || v === null) ? {} : (Mini.isArrayLike(v) ? [] : {});
+};
+
+/**
+ * Iterates an object or an array with an iteratee and a stack of stack trace
+ *
+ * @static
+ * @memberof H
+ * @param {Array|Object} obj
+ * @param {Function} fn
+ * @param {Array|String} [stackStack]
+ * @return {Array|Object} return mapped results of the input object
+ */
+I.each = function(obj, fn, stackStack) {
+    stackStack = stackStack || [];
+    if (typeof stackStack == 'string' || !Mini.isArrayLike(stackStack)) {
+        stackStack = [stackStack];
+    }
+    stackStack.unshift(E.getStackTrace());
+    var ret = I.resultWrapper(obj);
+    if (D.root[D.__name].debug) {
+        var print = false;
+        C.each(obj, function(val, key, list) {
+            try {
+                var r = fn(val, key, list);
+                if (r) ret[key] = r;
+            } catch (e) {
+                //E.printStackTrace only accepts one parameter
+                if (!print) {
+                    e.printStackTrace(stackStack);
+                    print = true;
+                }
+            }
+        });
+    } else {
+        C.each(obj, function(val, key, list) {
+            var r = fn(val, key, list);
+            if (r) ret[key] = r;
+        });
+    }
+    return ret;
+};
+
+/**
+ * Just iterate the input object
+ * @type {function((Array|Object), Function=): (Array|Object)}
+ */
+I.every = C.each;
+
+/**
+ * Iterator function with early quit.
+ *
+ * @static
+ * @memberof H
+ * @param {Array|Object} data data to iterate
+ * @param {Function} fn function to yield result of each input
+ * @param {Function} callable function to check if the itearting should be terminated
+ * @param {Array} [stackStack] stack trace stack
+ */
+I.until = function(data, fn, callable, stackStack) {
+    stackStack = stackStack || [];
+    if (typeof stackStack == 'string' || !Mini.isArrayLike(stackStack)) {
+        stackStack = [stackStack];
+    }
+    stackStack.unshift(E.getStackTrace());
+    var ret = I.resultWrapper(data);
+    //TODO: does it work? (not including `core` module here due to dependency error)
+    //TODO: remove dependency on static named variable `H`
+    if (D.root[D.__name].debug) {
+        var print = false;
+        C.find(data, function(val, key, list) {
+            try {
+                var r = fn(val, key, list);
+                if (r) ret[key] = r;
+                return callable(val, key, list);
+            } catch (e) {
+                if (!print) {
+                    e.printStackTrace(stackStack);
+                    print = true;
+                }
+            }
+        });
+    } else {
+        C.find(data, function(val, key, list) {
+            var r = fn(val, key, list);
+            if (r) ret[key] = r;
+            return callable(val, key, list);
+        });
+    }
+    return ret;
+};
+
+/**
+ * Iterate all keys on the object. (indices on arrays)
+ * Would prefer H.each(H.keys())
+ *
+ * @static
+ * @memberof H
+ * @param {Array|Object} data data to iterate
+ * @param {Function} callable iteratee to yield result
+ */
+I.eachKey = function(data, callable) {
+    var keys = data;
+    if (!Mini.isArrayLike(data)) {
+        keys = C.keys(data);
+    }
+    var l = keys.length;
+    var n = keys.length;
+    for (l++; --l;) {
+        callable(n - l, keys[n - l], data);
+    }
+};
+
+/**
+ * Iterate on a range of numbers.
+ *
+ * @static
+ * @memberof H
+ * @return {Array|Object}
+ * @example
+ *
+ * H.eachIndex(4, function() {}) => 4x undefined
+ * H.eachIndex(1, 4, function() {}) => 3x undefined
+ * H.eachIndex(2, 4, 2, function() {}) => 1x undefined
+ */
+I.eachIndex = function() {
+    var length = arguments.length;
+    //accept 2-4 arguments only.
+    if (length < 2 || length > 4) {
+        return;
+    }
+    var start = length > 2 ? arguments[0] : 0;
+    var end = length === 2 ? arguments[0] : arguments[1];
+    var step = length >= 4 ? arguments[2] : 1;
+    var iteratee = arguments[length - 1];
+
+    //end, iteratee
+    //start, end, iteratee
+    //start, end, step, iteratee
+    var rs = I.resultWrapper([]);
+    var i = 0;
+
+    if (step === 1) {
+        //short for is faster than dowhile
+        var ci = start;
+        for (i = end - start + 1; --i;) {
+            rs[ci] = iteratee(ci, ci);
+            ci++;
+        }
+        return rs;
+    } else {
+        do {
+            rs[start] = iteratee(start, i++);
+
+            start += step;
+        } while (start <= end);
+        return rs;
+    }
+};
+
+/**
+ * Iterator discarding values.
+ *
+ * @param {Array|Object|Function} ele object to iterate
+ * @param {Function} fn iteratee to produce values
+ */
+I.filter = function(ele, fn) {
+    if (fn === undefined) {
+        fn = ele;
+        ele = this;
+    }
+    return I.each(ele, function(o) {
+        if (fn(o)) {
+            return o;
+        }
+    });
+};
+
+module.exports = I;
+},{"../mini":3,"./detect":15,"./stacktrace":24,"lodash/core":6}],19:[function(require,module,exports){
+/*
+ * Math-Related Module
+ */
+
+var Ms = {};
+var C = require('../mini');
+var H = require('./stacktrace');
+
+/**
+ * Sum a list of number
+ *
+ * @static
+ * @memberof H
+ * @param {Array} list
+ * @returns {number}
+ */
+Ms.sum = function(list) {
+    if (!C.isArrayLike(list)) return 0;
+    var sum = 0;
+    var length = list.length;
+    length++;
+    while(--length) {
+        sum += list[length - 1];
+    }
+    if (isNaN(sum)) {
+        H.printStackTrace("NaN!");
+        return 0;
+    }
+    return sum;
+};
+
+/**
+ * Hypot polyfill.
+ *
+ * @static
+ * @memberof H
+ * @type {Function}
+ */
+Ms.hypot = Math.hypot || function() {
+        return Math.sqrt(Ms.sum(C.arrayEach(arguments, function(arg) {
+            return arg * arg;
+        })));
+    };
+
+/**
+ * Log2 polyfill
+ *
+ * @static
+ * @memberof H
+ * @type {Function}
+ */
+Ms.log2 = Math.log2 || function(number) {
+        return Math.log(number) / Math.log(2);
+    };
+
+/**
+ * Check if a variable between given two numbers
+ *
+ * @static
+ * @memberof H
+ * @param {Number} v number to check
+ * @param {Number} v0 margin 1
+ * @param {Number} v1 margin 2
+ * @returns {boolean}
+ */
+Ms.varInRange = function(v, v0, v1) {
+    return (v - v0) * (v - v1) < 0;
+};
+
+/**
+ * Check if a point [x, y] is inside the rectangle of two given points.
+ *
+ * @static
+ * @memberof H
+ * @param {Object} p point to check
+ * @param {Object} p0 point 1
+ * @param {Object} p1 point 2
+ * @returns {boolean}
+ */
+Ms.pointInRect = function(p, p0, p1) {
+    var result = true;
+    C.arrayEach(p, function(ele, index) {
+        result &= Ms.varInRange(ele, p0[index], p1[index]);
+    });
+    return result;
+};
+
+/**
+ * Extract max value. Object not supported
+ *
+ * @static
+ * @memberof H
+ * @param list
+ * @returns {number}
+ */
+Ms.max = function(list) {
+    var mx = -Infinity;
+    C.arrayEach(list, function(v) {
+        if (v > mx) mx = v;
+    });
+    return mx;
+};
+
+/**
+ * Extract min value. Object not supported
+ *
+ * @static
+ * @memberof H
+ * @param list
+ * @returns {number}
+ */
+Ms.min = function(list) {
+    var mx = Infinity;
+    C.arrayEach(list, function(v) {
+        if (v < mx) mx = v;
+    });
+    return mx;
+};
+
+//dependes on `keys` and `values`
+// Ms.maxValue = function(obj) {
+//     return Ms.max(C.values(obj));
+// };
+//
+// Ms.minValue = function(obj) {
+//     return Ms.min(C.values(obj));
+// };
+
+/*
+ * Individual Functions
+ */
+
+/**
+ * Degree to radian
+ *
+ * @static
+ * @memberof H
+ * @param {Number} degree degree value
+ * @returns {number} radian value
+ */
+Ms.degToRad = function(degree) {
+    return (degree / 180.0) * Math.PI;
+};
+
+/**
+ * Radian to degree
+ *
+ * @static
+ * @memberof H
+ * @param {Number} rad radian value
+ * @returns {number} degree value
+ */
+Ms.radToDeg = function(rad) {
+    return rad * 180.0 / Math.PI;
+};
+
+/**
+ * Normalize degree value to [0, 360)
+ *
+ * @static
+ * @memberof H
+ * @param {Number} degree degree value
+ * @returns {number} normalized degree value
+ */
+Ms.standardizeDegree = function(degree) {
+    var floor = Math.floor(degree / 360.0);
+    return degree - floor * 360.0;
+};
+
+/**
+ * Normalize radian value to [0, 2*PI)
+ *
+ * @static
+ * @memberof H
+ * @param {Number} rad radian value
+ * @returns {number} normalized radian value
+ */
+Ms.standardizeRad = function(rad) {
+    var floor = Math.floor(rad / (2 * Math.PI));
+    return rad - floor * 2 * Math.PI;
+};
+
+/**
+ * Convert point in rectangle coordinates to polar coordinates. (in radian)
+ *
+ * @static
+ * @memberof H
+ * @param {Array} coor rect coordinates
+ * @returns {*[]} polar coordinates
+ */
+Ms.rectToPolar = function(coor) {
+    var r = Ms.hypot(coor[0], coor[1]);
+    var absTheta = Math.atan2(Math.abs(coor[1]), Math.abs(coor[0])); // in rad
+    var signal = coor[0] * coor[1] < 0;
+    if (coor[0] >= 0) {
+        if (coor[1] >= 0) {
+            return [r, absTheta];
+        } else {
+            return [r, 2 * Math.PI - absTheta];
+        }
+    } else {
+        return [r, Math.PI + (signal ? -1 : 1) * absTheta];
+    }
+};
+
+/**
+ * Convert point in polar coordinates to rectangle coordinates.
+ *
+ * @static
+ * @memberof H
+ * @param {Array} coor polar coordinates
+ * @returns {*[]} rectangle coordinates
+ */
+Ms.polarToRect = function(coor) {
+    var cA = Math.cos(coor[1]);
+    var sA = Math.sin(coor[1]);
+    return [coor[0] * cA, coor[0] * sA];
+};
+
+/**
+ * Convert distance in latitude to meter
+ *
+ * @static
+ * @memberof H
+ * @param {Number} delta distance represented in latitude
+ * @returns {number} distance in meter
+ */
+Ms.latToMeter = function(delta) {//in meters
+    return 40008000 * delta / 360.0;
+};
+
+/**
+ * Convert distance in longtitude around some latitude to meter
+ *
+ * @static
+ * @memberof H
+ * @param {Number} lat latitude
+ * @param {Number} delta distance in longtitude
+ * @returns {number} distance in meter
+ */
+Ms.lngToMeterAtLat = function(lat, delta) {
+    return delta * Math.cos(Math.PI * Math.abs(lat) / 180) * 40075040 / 360.0;
+};
+
+/**
+ * Convert distance in meter to distance in latitude
+ *
+ * @static
+ * @memberof H
+ * @param {Number} meter distance in meter
+ * @returns {number} distance in latitude
+ */
+Ms.meterToLat = function(meter) {
+    return 360.0 * meter / 40008000;
+};
+
+/**
+ * Convert distance in meter to distance in longtitude around some latitude
+ *
+ * @static
+ * @memberof H
+ * @param {Number} lat latitude
+ * @param {Number} meter distance in meter
+ * @returns {number} distance in longtitude
+ */
+Ms.meterToLngAtLat = function(lat, meter) {
+    return 360.0 * meter / (40075040 * Math.cos(Math.PI * Math.abs(lat) / 180));
+};
+
+/**
+ * Calculate the distance between two points on earth.
+ * Points are represented in 2-element arrays ([longtitude, latitude])
+ * Assuming the earth a perfect sphere.
+ *
+ * @static
+ * @memberof H
+ * @param {Array} p0 point 1
+ * @param {Array} p1 point 2
+ * @returns {number} distance in meters
+ */
+Ms.distOnEarth = function(p0, p1) {
+    //[lng, lat], assuming earth a sphere
+    return Math.PI * 6400000 * Math.acos(Math.cos(p0[0] - p1[0]) + Math.cos(p0[1] - p1[1]) - 1) / 180.0;
+};
+
+module.exports = Ms;
+},{"../mini":3,"./stacktrace":24}],20:[function(require,module,exports){
+/*
+ * Object-Related Module
+ */
+
+var O = {};
+require('./stacktrace');
+
+//variable type to be checked
+/**
+ * Checks if the target string contains a charsequence.
+ *
+ * @static
+ * @memberof H
+ * @param {String} str target string
+ * @param {String} sub substring to check
+ * @returns {boolean}
+ */
+O.strContains = function(str, sub) {
+    return str.indexOf(sub) !== -1;
+};
+
+/**
+ * Checks if the target string contains a charsequence ignoring the char case.
+ *
+ * @static
+ * @memberof H
+ * @param {String} str target string
+ * @param {String} sub substring to check
+ * @returns {boolean}
+ */
+O.strContainsIgnoreCase = function(str, sub) {
+    return str.toLowerCase().indexOf(sub.toLowerCase()) !== -1;
+};
+
+O.parseJson = function(json) {
+    try {
+        return JSON.parse(decodeURI(json));
+    } catch (e) {
+        try {
+            return JSON.parse(json);
+        } catch (e) {
+            e.printStackTrace();
+        }
+    }
+    return undefined;
+};
+
+/**
+ * Clones the object via JSON.
+ * Should be used on small plain javascript objects only.
+ *
+ * @static
+ * @memberof H
+ * @param {Array|Object} obj
+ * @return {Object} cloned object
+ */
+O.cloneByParse = function(obj) {
+    //for small objects only
+    return JSON.parse(JSON.stringify(obj));
+};
+
+module.exports = O;
+
+},{"./stacktrace":24}],21:[function(require,module,exports){
+var root = require('./detect').root;
+
+root.requestAnimationFrame = (function() {
+    return root.webkitRequestAnimationFrame ||
+        root.requestAnimationFrame ||
+        root.mozRequestAnimationFrame ||
+        root.oRequestAnimationFrame ||
+        root.msRequestAnimationFrame ||
+        function(callback/*, element*/){
+            return root.setTimeout(callback, 1000 / 60);
+        };
+})();
+
+},{"./detect":15}],22:[function(require,module,exports){
+/*
+ * ResultSet Module
+ */
+var RS = {};
+var H = require('lodash/core');
+var ARS = require('./abstractresultset');
+var I = require('./iterator');
+
+var RsIdentifier = '__isRS__';
+
+//the default ResultSet should not exclude any values
+//noinspection JSUnusedLocalSymbols
+function checker(val) {
+    return !val['__isRoot__'];
+}
+
+//default channel doesn't need filter
+ARS.registerChannel(RsIdentifier, [Array.prototype, Object.prototype], checker);
+
+function registerComponent(name, func) {
+    ARS.registerChannelFunction(RsIdentifier, name, func);
+}
+
+function wrapFunction(fn) {
+    return function() {
+        if (checker(arguments[0])) {
+            return fn.apply(this, arguments);
+        }
+    }
+}
+
+/*
+ * ResultSet Operations
+ */
+/**
+ * Iterates an Array or Object, promise version
+ *
+ * @param {*} fn iterator function
+ * @returns {Array|Object} result composed by return statement
+ */
+function each(fn) {
+    //patch `fn`
+    arguments[0] = wrapFunction(arguments[0]);
+    return I.each.apply(H, [this].concat(Array.prototype.slice.call(arguments)));
+}
+
+/**
+ * Iterates an Array or Object, return the filtered result, promise ver
+ *
+ * @param {Function} fn filter function
+ * @returns {Array|Object} filtered result
+ */
+function filter(fn) {
+    fn = wrapFunction(fn);
+    return I.each(this, function(o) {
+        if (fn(o)) {
+            return o;
+        }
+    });
+}
+
+/**
+ * Sort an Array or values of an Object, return the sorted array, promise ver
+ *
+ * @param {Function} fn sort function
+ * @returns {*|Array} sorted array
+ */
+function sortBy(fn) {
+    fn = wrapFunction(fn);
+    return H.sortBy(this, fn);
+}
+
+/**
+ * Returns the value array of an object or itself of an array.
+ *
+ * @returns {*|Array}
+ */
+function toArray() {
+    return H.values(this);
+}
+
+/**
+ * Return grouped values by a grouping function of an array or an object
+ *
+ * @param {Function} fn grouping function
+ * @returns {*}
+ */
+function groupBy(fn) {
+    fn = wrapFunction(fn);
+    return H.groupBy(this, fn);
+}
+
+/**
+ * Joins an array or the value array of an object
+ *
+ * @param {String} separator result separator
+ * @returns {string} joined string
+ */
+function join(separator) {
+    return H.values(this).join(separator || "");
+}
+
+/**
+ * Sums all numbers in an array or value array of an object
+ *
+ * @returns {number} sum value
+ */
+function sum() {
+    var s = 0;
+    I.each(this || [], function(v) {
+        var nv = H.isInteger(v) ? parseInt(v) : (H.isFloat(v) ? parseFloat(v) : NaN);
+        if (!isNaN(nv)) {
+            s += nv;
+        }
+    });
+    return s;
+}
+
+/**
+ * Returns the length of an array or the value array of an object
+ *
+ * @returns {Number} length
+ * @constructor
+ */
+function getLength() {
+    return H.values(this).length;
+}
+
+/**
+ * Returns the array itself or the value array of an object
+ *
+ * @returns {*|Array} result array
+ */
+function values() {
+    return H.values(this);
+}
+
+/**
+ * Returns the key array of an object or the index array of an array
+ *
+ * @returns {*|Array} key array
+ */
+function keys() {
+    return H.keys(this);
+}
+
+/**
+ * Returns the flatten array of an nested array.
+ *
+ * @returns {*|Array}
+ */
+function flatten() {
+    return H.flatten(this) || [];
+}
+
+registerComponent("each",    each);
+registerComponent("filter",  filter);
+registerComponent("sortBy",  sortBy);
+registerComponent("toArray", toArray);
+registerComponent("groupBy", groupBy);
+registerComponent("join",    join);
+registerComponent("sum",     sum);
+registerComponent("Length",  getLength);
+registerComponent("values",  values);
+registerComponent("keys",    keys);
+registerComponent("flatten", flatten);
+
+/**
+ * Wrap an object to default ResultSet
+ *
+ * @static
+ * @memberof H
+ * @param {Array|Object} v anything to wrap
+ * @returns {*} wrapped ResultSet object
+ */
+var wrap = ARS.wrapperGen(RsIdentifier);
+
+RS.wrap = wrap;
+/**
+ * @deprecated
+ * @type {wrap}
+ */
+RS.fastWrap = wrap;
+
+module.exports = RS;
+
+},{"./abstractresultset":11,"./iterator":18,"lodash/core":6}],23:[function(require,module,exports){
+var S = {};
+
+var H = require('./detect');
+var root = H.root;
+
+var noop = function() {
+    return function() {};
+};
+
+var navigator = H.root.navigator || {userAgent: ""};
+
+/**
+ * Add property to object
+ *
+ * @static
+ * @memberof H
+ * @param {Object} object to operate
+ * @param {String} key field to fill in
+ * @param {Object} descriptor property descriptor
+ */
+var addProperty = noop();
+//defineProperty in IE8 only accepts DOM elements as parameters, while in Safari 5 it's opposite
+if (!Object.defineProperty || (0 < H.getIE() <= 8 && navigator.userAgent.indexOf('MSIE') !== -1)) {
+    addProperty = function(instance, k, descriptor) {
+        instance[k] = descriptor.value;
+
+        if (isObject(descriptor[k])) {
+            instance[k].ienumerable = !descriptor.enumerable;
+        } else {
+            if (!instance[k].ienumerables) {
+                instance[k].ienumerables = [];
+            }
+            if (!descriptor.enumerable && instance[k].ienumerables instanceof Array) {
+                instance[k].ienumerables.push(k);
+            } else if (instance['ienumerables']) {
+                instance['ienumerables'][k] = undefined;
+                delete instance['ienumerables'][k];
+            }
+        }
+
+        //configurable, writable to be impl.
+    };
+
+    addProperty.__userDefined__ = true;
+
+    if (!Object.defineProperty) Object.defineProperty = addProperty;
+} else {
+    addProperty = Object.defineProperty;
+}
+
+/**
+ * Create object and copy all properties into it.
+ *
+ * @static
+ * @memberof H
+ * @param {Object} base base class
+ * @param {Object} reference object to copy properties from
+ * @example
+ *
+ * var obj = H.createObject(Object.prototype, {a: 1, b: 2})
+ */
+var createObject = function() {
+    function F() {}
+
+    return function(o, p) {
+        F.prototype = o;
+        var instance = new F();
+        if (p) {
+            //p is a descriptor with key name k
+            //is this enough for replacing H.each(H.keys ?
+            for (var k in p) {
+                if (p.hasOwnProperty(k)) addProperty(instance, k, p[k]);
+            }
+        }
+        return instance;
+    };
+}();
+
+//emulate legacy getter/setter API using ES5 APIs
+try {
+    if (!Object.prototype.__defineGetter__ &&
+        addProperty({},"x",{get: function(){return true;}}).x) {
+        addProperty(Object.prototype, "__defineGetter__",
+            {enumerable: false, configurable: true,
+                value: function(name,func)
+                {addProperty(this,name,
+                    {get:func,enumerable: true,configurable: true});
+                }});
+        addProperty(Object.prototype, "__defineSetter__",
+            {enumerable: false, configurable: true,
+                value: function(name,func)
+                {addProperty(this,name,
+                    {set:func,enumerable: true,configurable: true});
+                }});
+    }
+} catch(defPropException) {/*Do nothing if an exception occurs*/}
+
+// Avoid `console` errors in browsers that lack a console.
+(function() {
+    var method;
+    var noop = function () {};
+    var methods = [
+        'assert', 'clear', 'count', 'debug', 'dir', 'dirxml', 'error',
+        'exception', 'group', 'groupCollapsed', 'groupEnd', 'info', 'log',
+        'markTimeline', 'profile', 'profileEnd', 'table', 'time', 'timeEnd',
+        'timeline', 'timelineEnd', 'timeStamp', 'trace', 'warn'
+    ];
+    var length = methods.length;
+    var console = root.console || {};
+    if (!root.console) root.console = console;
+
+    while (length--) {
+        method = methods[length];
+
+        // Only stub undefined methods.
+        if (!console[method]) {
+            console[method] = noop;
+        }
+    }
+}());
+
+//Polyfill for IE<9
+if (!String.prototype.trim) {
+    String.prototype.trim = function () {
+        return this.replace(/^[\s\uFEFF\xA0]+|[\s\uFEFF\xA0]+$/g, '');
+    };
+}
+
+S.addProperty = addProperty;
+S.createObject = createObject;
+
+S.noop = function() {};
+
+module.exports = S;
+
+},{"./detect":15}],24:[function(require,module,exports){
+var C = {};
+
+var Mini = require('../mini');
+
+function stack() {
+    this.stacks = [];
+    this.push = function(e) {
+        if (e instanceof Error) {
+            this.stacks.push(e.stack);
+        } else if (typeof e === 'string') {
+            if (e.indexOf('\n') === -1) {
+                //title
+                this.stacks.push(new Error(e));
+            } else {
+                //stack
+                var error = new Error("Nested Error");
+                error.stack = e;
+                this.stacks.push(error);
+            }
+        }
+    };
+    this.printAll = function() {
+        var join = [];
+        Mini.arrayEach(this.stacks, function(e) {
+            // join.push(e.message);
+            join = join.concat((e.stack || "").split("\n"));
+        });
+        console.error(join.join("\n"));
+        if (!eval('__catching')) {
+            throw new InformError();
+        }
+    };
+}
+
+C.stack = stack;
+
+function InformError() {
+    this.message = "Inform Error Catchers";
+    this.name = "InformError";
+    this.stack = new Error(this.name).stack;
+}
+
+InformError.prototype = Error.prototype;
+
+C.InformError = InformError;
+
+var clog = function (content) {
+    console.error(content);
+    //throw a simple error to inform catchers, eval(someone is catching)
+    if (eval('__catching')) {
+        throw new InformError("Nested Error");
+    }
+};
+
+var logStack = function(stackStack) {
+    var joined = [];
+    Mini.arrayEach(stackStack || [], function(stack) {
+        if (typeof stack == 'string') {
+            joined = joined.concat(stack.split("\n"));
+        } else if (stack instanceof Error) {
+            joined = joined.concat(stack.stack.split("\n"));
+        }
+    });
+    if (joined.length != 0) {
+        var ret = joined[0];
+        for (var i = 1; i < joined.length; i++) {
+            ret += "\n" + joined[i];
+        }
+        clog.apply(this, [ret]);
+    }
+};
+
+/**
+ * Generate stack trace string. (separated by `\n`)
+ *
+ * @static
+ * @memberof H
+ * @param {String} [title]
+ * @returns {string} stack trace string
+ */
+C.getStackTrace = function(title) {
+    var callstack = "Referenced From: " + (title || "");
+    var e = title instanceof Error ? title : new Error(callstack);
+    var split = e.stack.split('\n');
+    if (split.length > 1) {
+        var t = split[0];
+        //remove getStackTrace itself
+        if (t.indexOf("getStackTrace") !== -1) {
+            split.shift();
+            split.shift();
+            split.unshift(t);
+        }
+        // split.unshift(callstack);
+        return split.join('\n');
+    }
+    return e.stack;
+};
+
+var DefaultNestedTitle = "Nested error:";
+var DefaultTitle = "Error:";
+
+/**
+ * Print stack trace stack.
+ *
+ * @static
+ * @memberof H
+ * @param {String|Error} [title] title or error of current layer
+ * @param {Array} [stackStack] stack trace stack (possibly)
+ * @param {boolean} [silient] the current error should be silent
+ * @example
+ *
+ * usage:
+ * H.printStackTrace(string/error, stackStack)
+ * H.printStackTrace(string/error)
+ * H.printStackTrace(stackStack)
+ * H.printStackTrace()
+ * variant:
+ * error.printStackTrace() -> printStackTrace(error, [])
+ */
+C.printStackTrace = function(title, stackStack, silient) {
+    if (Mini.isArrayLike(title)) {
+        //noinspection JSValidateTypes for arguments
+        stackStack = title;
+        if (stackStack.length) {
+            title = DefaultNestedTitle;
+        } else {
+            title = DefaultTitle;
+        }
+    }
+    title = title || DefaultTitle;
+    stackStack = stackStack || [];
+    if (!Mini.isArrayLike(stackStack) || typeof stackStack == 'string') {
+        stackStack = [stackStack];
+    }
+    if (!silient) stackStack.unshift(C.getStackTrace(title));
+    logStack.call(this, stackStack);
+};
+
+/**
+ * Print string with stack trace in debug mode.
+ *
+ * @static
+ * @memberof H
+ * @param {String|Error} [d] content to print
+ * @param {Array} [stackTrace] stack trace stack
+ */
+C.errlog = function(d, stackTrace) {
+    if (C.debug) {
+        C.printStackTrace(d);
+        if (stackTrace && !C.isArrayLike(stackTrace)) {
+            console.error("Referenced From: " + stackTrace);
+        } else if (stackTrace && C.isArrayLike(stackTrace)) {
+            for (var i = stackTrace.length - 1; i > -1; i--) {
+                if (stackTrace[i]) console.error("Referenced From: " + stackTrace[i]);
+            }
+        }
+    }
+};
+
+function printStackTrace(stackStack) {
+    C.printStackTrace(this, stackStack);
+}
+
+Error.prototype.getStackTrace = C.getStackTrace;
+Error.prototype.printStackTrace = printStackTrace;
+
+module.exports = C;
+},{"../mini":3}],25:[function(require,module,exports){
+var C = {};
+var H = require('./stacktrace');
+var Detect = require('./detect');
+
+if (Detect.isNodejs) {
+    Detect.root.__sessionStorage = {};
+
+    C.setItem = setItemFallback;
+    C.getItem = getItemFallback;
+    C.removeItem = removeItemFallback;
+} else if (Detect.root.sessionStorage) try {
+    sessionStorage.setItem('test', '1');
+    sessionStorage.removeItem('test');
+
+    /**
+     * Store value to session storage.
+     * In node.js environment, data will be stored in global variable `__sessionStorage` (lost on exit).
+     * In browsers without sessionStorage support, will try cookie first.
+     *
+     * @static
+     * @memberof H
+     * @param key
+     * @param value
+     */
+    C.setItem = function(key, value) {
+        sessionStorage.removeItem(key);
+        sessionStorage.setItem(key, value);
+    };
+
+    /**
+     * Deprecated store value to session storage.
+     *
+     * @static
+     * @memberof H
+     * @deprecated
+     * @param key
+     * @param value
+     * @type {Function}
+     */
+    C.secAddItem = C.setItem;
+
+    /**
+     * Remove stored value of key in session storage.
+     *
+     * @static
+     * @memberof H
+     * @param key
+     */
+    C.removeItem = function(key) {
+        sessionStorage.removeItem(key);
+    };
+
+    /**
+     * Retrieve stored value in session storage.
+     *
+     * @static
+     * @memberof H
+     * @param key
+     */
+    C.getItem = function(key) {
+        return sessionStorage.getItem(key);
+    };
+
+} catch (e) {
+    H.printStackTrace('Session Storage Not Supported');
+
+    C.secAddItem = function(key, value) {
+        setCookie(key, value, 1);
+    };
+
+    C.removeItem = function(key) {
+        setCookie(key, null, 0);
+    };
+
+    C.getItem = function(key) {
+        return getCookie(key);
+    };
+}
+
+function setCookie(key, value, days) {
+    var date = new Date();
+    date.setTime(date.getTime() + days * 86400000);
+    document.cookie = key + "=" + value + "; expires=" + date.toUTCString();
+}
+
+function getCookie(key) {
+    var regex = new RegExp('^\\s*' + key + '=');
+    var splits = document.cookie.split(';');
+    for (var i = 0; i < splits.length; i++) {
+        var s = splits[i];
+        var d = s.match(regex);
+        if (d !== null && d.length !== 0) {
+            return s.replace(regex, '');
+        }
+    }
+}
+
+function setItemFallback(key, value) {
+    Detect.root.__sessionStorage[key] = value;
+}
+
+function getItemFallback(key) {
+    return Detect.root.__sessionStorage[key];
+}
+
+function removeItemFallback(key) {
+    Detect.root.__sessionStorage[key] = undefined;
+}
+
+module.exports = C;
+
+},{"./detect":15,"./stacktrace":24}],26:[function(require,module,exports){
+var C = {};
+
+C.now = Date.now;
+
+/**
+ * Run a function, count the time consumed.
+ *
+ * @static
+ * @memberof H
+ * @param {Function} cb function to run
+ * @returns {number} time in millis
+ */
+C.test = function(cb) {
+    var o = C.now();
+    cb();
+    var d = C.now() - o;
+    console.log(d);
+    return d;
+};
+
+/**
+ * Run a function, and record it in "Profile" tab in chromium.
+ *
+ * @static
+ * @memberof H
+ * @param {Function} cb function to run
+ * @param {String} title title of this run
+ * @returns {number} time in millis
+ */
+C.profile = function(cb, title) {
+    console.profile(title || "Profile");
+    var o = C.now();
+    cb();
+    var d = C.now() - o;
+    //noinspection JSUnresolvedFunction
+    console.profileEnd(title || "Profile");
+    return d;
+};
+
+/**
+ * Do something for some times
+ *
+ * @static
+ * @memberof H
+ * @param {Function} cb function to run
+ * @param {Number} times times function will be executed
+ */
+C.repeat = function(cb, times) {
+    if (times > 0) {
+        do {
+            cb();
+        } while(times--);
+    }
+};
+
+/**
+ * Test some method and record the time consumption for several times.
+ *
+ * @static
+ * @memberof H
+ * @param {Function} cb function to run
+ * @param {Number} times times function will be executed
+ */
+C.testTimes = function(cb, times) {
+    C.test(function() {
+        C.repeat(cb, times);
+    });
+};
+
+/**
+ * Profile some method for several times.
+ *
+ * @static
+ * @memberof H
+ * @param {Function} cb function to run
+ * @param {Number} times times function will be executed
+ * @param {String} title title of this run
+ */
+C.profileTimes = function(cb, times, title) {
+    C.profile(function() {
+        C.repeat(cb, times);
+    }, title);
+};
+
+module.exports = C;
+
+},{}],27:[function(require,module,exports){
+var C = {};
+
+var I = require('./iterator');
+var D = require('./detect');
+
+var location = D.root.location || "";
+
+C.QueryString = function(item){
+    var svalue = location.search.match(new RegExp("[\?\&]" + item + "=([^\&]*)(\&?)","i"));
+    return svalue ? svalue[1] : svalue;
+};
+
+/**
+ * @static
+ * @memberof H
+ * @deprecated
+ */
+C.Request = {
+    QueryString: C.QueryString
+};
+
+/**
+ * Generate URL with GET param string
+ *
+ * @static
+ * @memberof H
+ * @param {String} server prefix string (domain)
+ * @param {String} action path of file requests
+ * @param {Object} params get param object
+ * @returns {string} URL string
+ * @example
+ *
+ * H.getUrlByParams("http://abc.def/", "path/of/file", {a: 1})
+ * =>
+ * "http://abc.def/path/of/file?a=1"
+ */
+C.getUrlByParams =  function(server, action, params) {
+    var paramUrl = "";
+    I.each(params || {}, function(param, key) {
+        paramUrl += "&" + key + "=";
+        var p = "";
+        if (param instanceof Array) {
+            p = "[";
+            var tr = "";
+            I.each(param, function(val) {
+                tr += ",";
+                if (val instanceof Boolean ||
+                    val instanceof String ||
+                    val instanceof Number ||
+                    typeof val === "string" ||
+                    typeof val === "number") {
+                    tr += "\"" + val + "\"";
+                } else if (val) {
+                    tr += val;
+                }
+            });
+            p += tr.substr(1) + "]";
+        } else {
+            p = param;
+        }
+        paramUrl += p;
+    });
+    return (server + action + "?" + paramUrl.substr(1));
+};
+
+/**
+ * Generate simple param string from an object
+ *
+ * @static
+ * @memberof H
+ * @param {Object} data param object
+ * @returns {string}
+ * @example
+ *
+ * H.param({a:1, b:2})
+ * =>
+ * "a=1&b=2"
+ */
+C.param = function(data) {
+    var s = [], add = function(k, v) {
+        s[s.length] = encodeURIComponent(k) + "=" + encodeURIComponent(v);
+    };
+
+    I.each(data, function(o, k) {
+        add(k, o);
+    });
+
+    return s.join("&").replace(/%20/g, "+");
+};
+
+module.exports = C;
+
+},{"./detect":15,"./iterator":18}],28:[function(require,module,exports){
+var C = {};
+
+/**
+ * Generate Uuid
+ *
+ * @static
+ * @memberof H
+ * @param {Number} [len] length of target string, not specified by default
+ * @param {Number} [radix] when length specified, limit possible characters in the result
+ * @returns {string}
+ */
+C.uuid = function (len, radix) {
+    var chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'.split('');
+    var uuid = [], i;
+    radix = radix || chars.length;
+
+    if (len) {
+        // Compact form
+        for (i = 0; i < len; i++) uuid[i] = chars[0 | Math.random()*radix];
+    } else {
+        // rfc4122, version 4 form
+        var r;
+        // rfc4122 requires these characters
+        uuid[8] = uuid[13] = uuid[18] = uuid[23] = '-';
+        uuid[14] = '4';
+        // Fill in random data.  At i==19 set the high bits of clock sequence as
+        // per rfc4122, sec. 4.1.5
+        for (i = 0; i < 36; i++) {
+            if (!uuid[i]) {
+                r = 0 | Math.random()*16;
+                uuid[i] = chars[(i == 19) ? (r & 0x3) | 0x8 : r];
+            }
+        }
+    }
+    return uuid.join('');
+};
+
+/**
+ * Generate Uuid in Default Format
+ *
+ * @static
+ * @memberof H
+ * @returns {string}
+ */
+C.fastUuid = function() {
+    var chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'.split('');
+    var uuid = new Array(36), rnd=0, r;
+    for (var i = 0; i < 36; i++) {
+        if (i === 8 || i === 13 || i === 18 || i === 23) {
+            uuid[i] = '-';
+        } else if (i === 14) {
+            uuid[i] = '4';
+        } else {
+            if (rnd <= 0x02) rnd = 0x2000000 + (Math.random()*0x1000000)|0;
+            r = rnd & 0xf;
+            rnd = rnd >> 4;
+            uuid[i] = chars[(i === 19) ? (r & 0x3) | 0x8 : r];
+        }
+    }
+    return uuid.join('');
+};
+
+module.exports = C;
+
+},{}],29:[function(require,module,exports){
+var DOM = require('./src/cssselector');
+
+// var Core = require('./target/dependencies/core');
+var Core = require('coreutil/core');
+var RS = require('./src/domresultset');
+var Attr = require('./src/cssattribute');
+
+Core.extend(Core, RS);
+Core.extend(Core, Attr);
+
+Core.root.H$ = DOM;
+
+module.exports = DOM;
+},{"./src/cssattribute":31,"./src/cssselector":33,"./src/domresultset":34,"coreutil/core":2}],30:[function(require,module,exports){
+var Func = require('./funchelper');
+
+var Attr = {};
+
+function noop(v) {return v}
+
+/**
+ * Get the attribute of the element
+ *
+ * @param {Element|walkAndGetAttributes} ele element to query
+ * @param {String} attr attribute to query
+ * @returns {string} attribute value
+ */
+function innerGetAttribute(ele, attr) {
+    return ele.getAttribute(attr);
+}
+
+/**
+ * Walks and recursively get all Elements' attribute value in the current ResultSet.
+ * And returns all results as a ResultSet.
+ *
+ * @param {Array|Element|NodeList} eles ResultSet
+ * @param {String} attr attribute name
+ * @param {Function} [postProcess] return value postprocessor
+ * @param {*} [addtionalAttr] parameter for `postProcess`
+ * @returns {*} ResultSet contains all attributes
+ */
+function walkAndGetAttributes(eles, attr, postProcess, addtionalAttr) {
+    return Func.createWalker(eles, function () {
+        return (postProcess || noop)(innerGetAttribute(this, attr), addtionalAttr);
+    }, [eles, attr, postProcess, addtionalAttr]);
+}
+
+/**
+ * Set the attribute of the element
+ *
+ * @param {Element|walkAndGetAttributes} ele element to operate
+ * @param {String} attr attribute to operate
+ * @param {String} val attribute value to set
+ */
+function innerSetAttribute(ele, attr, val) {
+    ele.setAttribute(attr, val);
+}
+
+/**
+ * Walks and recursively set all Elements' attribute values to a constant value in the current ResultSet.
+ *
+ * @param {Array|Element|NodeList} eles ResultSet
+ * @param {String} attr attribute name
+ * @param {String} val attribute value to set
+ */
+function walkAndSetAttributes(eles, attr, val) {
+    return Func.createWalker(eles, innerSetAttribute, [eles, attr, val]);
+}
+
+/**
+ * Walks and recursively set all Elements' attribute values to the corresponding value in the offered ResultSet.
+ *
+ * @param {Array|Element|NodeList} eles ResultSet
+ * @param {String} attr attribute name
+ * @param {String} valSet different attribute values stored as a ResultSet
+ */
+function walkAndSetAttributesBySet(eles, attr, valSet) {
+    return Func.createWalker(eles, innerSetAttribute, [eles, attr, valSet], function(args, i) {
+        args[2] = args[2][i];
+    });
+}
+
+/**
+ * Get or set attribute of the current ResultSet.
+ *
+ * @param {String} attribute attribute name
+ * @param {String|Array|NodeList|Element} [val] attribute value to set, or the ResultSet of attribute values
+ */
+Attr.attribute = Func.assembleFunctions(walkAndGetAttributes, walkAndSetAttributes, 1, 0);
+
+function splitClassString(val) {
+    return (val || "").trim().split(/[\s]+/) || [];
+}
+
+function splitGen(strategy) {
+    var func = strategy ? Func.arrayEnsureContains : Func.arrayEnsureWithout;
+    return function(val, clzz) {
+        return func(splitClassString(val), clzz).join(' ');
+    };
+}
+
+/**
+ * Gather all classes of each Element as a list of string in the current ResultSet.
+ *
+ * @param {Function} [alternative] alternative class string decorator
+ * @param {*} parameter No use
+ */
+function getClasses(alternative, parameter) {
+    return innerGetClass(this, alternative, parameter);
+}
+
+/**
+ * Gather all classes of each Element in the current Result to lists of string.
+ *
+ * @param {Array|NodeList|Element|getClasses|classOpGen} ele element to query
+ * @param alternative
+ * @param parameter
+ */
+function innerGetClass(ele, alternative, parameter) {
+    return walkAndGetAttributes(ele, 'class', alternative || splitClassString, parameter);
+}
+
+/**
+ * Class attribute operator function.
+ * Fetch the full class string of each Element in the current ResultSet, and pass it to an decorator function with a
+ * parameter.
+ * Mode 1: addClass mode, ensures the specific className will be in the class string
+ * Mode 2: removeClass mode, ensures the specific className will not be in the class string
+ * And then set the decorated class string back to the elements in the current ResultSet.
+ *
+ * @param {boolean} strategy Mode strategy. used to switch mode
+ * @returns {Function} Class string processor, work as addClass or removeClass
+ */
+function classOpGen(strategy) {
+    return function(className) {
+        var clss = innerGetClass(this, splitGen(strategy), className);
+
+        walkAndSetAttributesBySet(this, 'class', clss);
+    };
+}
+
+Attr.getClasses = getClasses;
+Attr.addClass = classOpGen(true);
+Attr.removeClass = classOpGen(false);
+
+module.exports = Attr;
+},{"./funchelper":35}],31:[function(require,module,exports){
+/*
+ * CSS Attribute Operation Basic
+ */
+var Attr = {};
+
+var Func = require('./funchelper');
+var Vendor = require('./vendor');
+var Mini = require('coreutil/mini');
+
+var AttributeMap = {
+    'width': ['innerWidth', 'clientWidth'],
+    'height': ['innerHeight', 'clientHeight'],
+    'parent': ['parentElement', 'parentNode'],
+    'text': ['innerText', 'textContent']
+};
+
+/**
+ * Extracts the only element in a ResultSet if there's only one.
+ *
+ * @param {Element|NodeList|Array} object ResuleSet to check
+ * @returns {*|null} extracted Element object
+ */
+function getSingleElement(object) {
+    if (object instanceof Element) {
+        return object;
+    }
+    var count = 0, vals = [];
+    if (Mini.isArrayLike(object)) {
+        Mini.arrayEach(object, function(v) {
+            if (v instanceof Element) {
+                count ++;
+                vals.push(v);
+            }
+        });
+        if (count === 1) {
+            return vals[0];
+        }
+    }
+    return false;
+}
+
+function queryAttrAlias(attr) {
+    var c = Vendor.toCamel(attr);
+    var f = Vendor.fromCamel(attr);
+    var c_alias = Vendor.attrs[c] || [];
+    var f_alias = Vendor.attrs[f] || [];
+    return c_alias.concat(f_alias).concat([attr]);
+}
+
+/*
+ * Getters
+ */
+function directRetrieveAttribute(ele, attr) {
+    var mapped = AttributeMap[attr] || [];
+    for (var i = 0; i < mapped.length; i++) {
+        var ret = ele[mapped[i]];
+
+        if (ret !== undefined) return ret;
+    }
+}
+
+function innerGetAttribute(ele, attr) {
+    return getComputedStyle(ele)[attr];
+}
+
+function innerGetDeclaredAttr(ele, attr) {
+    return (ele.style || {})[attr];
+}
+
+function innerGetAttributeUntil(ele, attr, style) {
+    var func = style === 1 ? innerGetAttribute : innerGetDeclaredAttr;
+    var direct = directRetrieveAttribute(ele, attr);
+    if (direct !== undefined) return direct;
+    var attrs = queryAttrAlias(attr);
+    for (var i = 0; i < (attrs || []).length; i++) {
+        var ret = func(ele, attrs[i]);
+        if (ret) return ret;
+    }
+}
+
+function collectElementsAttributes(eles, attr, style) {
+    return Func.createWalker(eles, innerGetAttributeUntil, [eles, attr, style]);
+}
+
+/*
+ * Setters
+ */
+//sometimes direct way doesn't work, cuz some shortcut attributes like clientWidth are readonly
+function directSetAttribute(ele, attr, val) {
+    var mapped = AttributeMap[attr] || [];
+    for (var i = 0; i < mapped.length; i++) {
+        if (ele[mapped[i]]) {
+            ele[mapped[i]] = val;
+            return true;
+        }
+    }
+    return false;
+}
+
+function innerSetAttribute(ele, attr, val) {
+    ele.style[attr] = val;
+}
+
+function innerSetAttributeUntil(ele, attr, val) {
+    //some attributes are read-only. try but don't believe it
+    directSetAttribute(ele, attr, val);
+    var attrs = queryAttrAlias(attr) || [];
+    for (var i = 0; i < attrs.length; i++) {
+        innerSetAttribute(ele, attrs[i], val);
+    }
+}
+
+/**
+ * Walks on ResultSet and set attributes of each to val
+ *
+ * @param {Element|NodeList|Array} eles ResultSet to check
+ * @param {String} attr attribute name
+ * @param {String} val attribute value to set
+ * @returns {*}
+ */
+function walkAndSetAttributes(eles, attr, val) {
+    return Func.createWalker(eles, innerSetAttributeUntil, [eles, attr, val]);
+}
+
+/**
+ * Get computed style of a ResultSet
+ *
+ * @param {Element|NodeList|Array} ele ResultSet to check
+ * @param {String} attr attribute name
+ */
+function getCssAttribute(ele, attr) {
+    ele = getSingleElement(ele);
+    if (!ele || !attr) {
+        return;
+    }
+    return collectElementsAttributes(ele, attr, 1);
+}
+
+//getAttribute and setAttribute is in DOM.Element, do not overwrite it
+Attr.getCssAttribute = getCssAttribute;
+Attr.getSingleElement = getSingleElement;
+Attr.setCssAttribute = walkAndSetAttributes;
+
+module.exports = Attr;
+},{"./funchelper":35,"./vendor":37,"coreutil/mini":3}],32:[function(require,module,exports){
+/*
+ * CSS Attributes Operate
+ */
+var Attr = require('./cssattribute');
+var H = require('coreutil/core');
+
+var Func = require('./funchelper');
+
+var Ops = {};
+
+/*
+ * Simple Attributes
+ */
+
+function attributeGetterGen(attr) {
+    return function(ele) {
+        return Attr.getCssAttribute(ele, attr);
+    };
+}
+
+function attributeSetterGen(attr) {
+    return function(ele, val) {
+        return Attr.setCssAttribute(ele, attr, val);
+    };
+}
+
+/**
+ * Get or set the specific attribute on all elements in the ResultSet
+ *
+ * @param {String} attr attribute name
+ * @returns {*|null}
+ */
+function attributeOpAssembled(attr) {
+    return Func.assembleFunctions(attributeGetterGen(attr), attributeSetterGen(attr), 0);
+}
+
+Ops.text =    attributeOpAssembled('text');
+Ops.height =  attributeOpAssembled('height');
+Ops.width =   attributeOpAssembled('width');
+Ops.parent =  attributeOpAssembled('parent');
+
+//General CSS Attributes
+Ops.cssAttr = function(attr, value) {
+    if (typeof attr === 'string' && arguments.length === 1) {
+        //get
+        return Attr.getCssAttribute(this, attr);
+    } else if (typeof attr === 'object') {
+        //set
+        var ele = this;
+        H.each(attr, function(val, key) {
+            Attr.setCssAttribute(ele, key, val);
+        });
+    } else if (arguments.length === 2) {
+        Attr.setCssAttribute(this, attr, value);
+    }
+};
+
+/*
+ * Class
+ */
+
+module.exports = Ops;
+},{"./cssattribute":31,"./funchelper":35,"coreutil/core":2}],33:[function(require,module,exports){
+var RS = require('./domresultset');
+var wrap = RS.wrapDom;
+var Mini = require('coreutil/mini');
+
+/**
+ * Search elements in the current ResultSet.
+ *
+ * @param {Array|Element|NodeList|Node} ele ResultSet to check
+ * @param {String|NodeList|Node|Window} selector CSS selector string
+ * @returns {*} ResultSet of elements
+ */
+function findElement(ele, selector) {
+
+    //top element is `html`, not document
+
+    //if selector is RS or window/document, wrap it
+    if (typeof selector !== 'string') {
+        if (selector === window || selector === document
+            || (selector instanceof Node && !(selector instanceof Element))) {
+            //css operations not allowed for window, but event operations allowed.
+            //TODO: add dom event module, make a splitter and change code here
+            return wrap(document.querySelectorAll('html'));
+        }
+        if (selector instanceof NodeList
+            || selector instanceof Element
+            || Mini.isArrayLike(selector)) {
+            return wrap(selector);
+        }
+    }
+
+    if (ele === document) {
+        return wrap(document.querySelectorAll(selector));
+    } else if(ele instanceof Element) {
+        return wrap(ele.prototype.querySelectorAll(selector));
+    }
+}
+
+/**
+ * CSS selector processing module
+ *
+ * @param {String} selector CSS selector string
+ */
+var $ = function(selector) {
+    return findElement(document, selector);
+};
+
+$.findElement = findElement;
+
+module.exports = $;
+},{"./domresultset":34,"coreutil/mini":3}],34:[function(require,module,exports){
+var RS = {};
+
+var ARS =      require('coreutil/src/abstractresultset');
+var Mini =     require('coreutil/mini');
+var Selector = require('./cssselector');
+var Attr =     require('./attribute');
+var Ops =      require('./cssoperators');
+var NodeOps =  require('./nodeop');
+
+var DomIdentifier = '__isDOM__';
+
+// var getSingleElement = CssAttr.getSingleElement;
+
+//node.js fallback
+var htmlElementObj = function() {};
+
+try {
+    htmlElementObj = eval('Element');
+} catch (e) {
+    e.printStackTrace("DOM cannot be operated in node.js environment!");
+    return;
+}
+
+function checker(val) {
+    if (val instanceof Array || val instanceof htmlElementObj || val instanceof NodeList) {
+        return true;
+    }
+}
+
+//, Node.prototype node can be added as event targets, but not css now.
+ARS.registerChannel(DomIdentifier, [Element.prototype, Array.prototype, NodeList.prototype], checker);
+
+function registerComponent(name, func) {
+    ARS.registerChannelFunction(DomIdentifier, name, func);
+}
+
+/*
+ * ResultSet Operations
+ *
+ * TODO: enable access control from ResultSet impl. (expand preCheck function)
+ * for example:
+ * ban access from DomResultSet.join
+ */
+/**
+ * Clones a list of nodes or a single node
+ * Supports depth up to 1.
+ *
+ * @memberof {Array|Element}
+ */
+function cloneDomElement(eles, deep) {
+    if (eles instanceof Element) {
+        return eles.cloneNode(!!deep);
+    }
+    if (Mini.isArrayLike(this)) {
+        return Mini.arrayEach(eles, function(ele) {
+            return cloneDomElement(ele, deep);
+        });
+    }
+}
+
+/**
+ * Clones the current ResultSet
+ *
+ * @param {boolean} [deep] do deep copy or not
+ */
+function cloneDom(deep) {
+    return cloneDomElement(this || [], deep);
+}
+
+/**
+ * Find elements satisfying the specific selector under the current ResultSet
+ *
+ * @param {String} selector selector string
+ * @returns {Array|NodeList|Element} ResultSet
+ */
+function find(selector) {
+    return Selector.findElement(this, selector);
+}
+
+registerComponent("clone",        cloneDom);
+registerComponent("css",          Ops.cssAttr);
+registerComponent("text",         Ops.text);
+registerComponent("attribute",    Attr.attribute);
+registerComponent("getClasses",   Attr.getClasses);
+registerComponent("addClass",     Attr.addClass);
+registerComponent("removeClass",  Attr.removeClass);
+registerComponent("append",       NodeOps.append);
+registerComponent("prepend",      NodeOps.prepend);
+registerComponent("insertHead",   NodeOps.insertHead);
+registerComponent("insertTail",   NodeOps.insertTail);
+registerComponent("parent",       Ops.parent);
+registerComponent("width",        Ops.width);
+registerComponent("height",       Ops.height);
+registerComponent("find",         find);
+
+var wrap = ARS.wrapperGen(DomIdentifier);
+
+RS.wrapDom = wrap;
+
+//RS.H$ is a CSS selector processor
+RS.H$ = Selector;
+
+module.exports = RS;
+},{"./attribute":30,"./cssoperators":32,"./cssselector":33,"./nodeop":36,"coreutil/mini":3,"coreutil/src/abstractresultset":11}],35:[function(require,module,exports){
+var Func = {};
+var Mini = require('coreutil/mini');
+
+function assembleFunctions(func1, func2, desiredArgsSize, earlyExitSize) {
+    return function() {
+        if (arguments.length === earlyExitSize) return;
+        var func = arguments.length === desiredArgsSize ? func1 : func2;
+        return func.apply(this, [this].concat(Array.prototype.slice.call(arguments)));
+    };
+}
+
+Func.assembleFunctions = assembleFunctions;
+
+Func.noop = function(v) {
+    return v;
+};
+
+function copyArray(arr) {
+    var ret = [];
+    for (var i = 0; i < arr.length; i++) {
+        ret[i] = arr[i];
+    }
+    return ret;
+}
+
+function recursivelyDomSomething(elements, collector, initArgs, argProcessor) {
+    //eles, ...args
+    function gen(eles) {
+        var args = arguments;
+        if (eles instanceof Element) {
+            return collector.apply(eles, args);
+        }
+        if (Mini.isArrayLike(eles)) {
+            var ret = [];
+            for (var i = 0; i < eles.length; i++) {
+                var ele = eles[i];
+                if (ele instanceof Element || Mini.isArrayLike(ele)) {
+                    var newArgs = copyArray(args);
+                    newArgs[0] = ele;
+                    ret[i] = gen.apply(ele, (argProcessor || Func.noop)(newArgs, i));
+                }
+            }
+            return ret;
+        }
+    }
+    return gen.apply(elements, initArgs);
+}
+
+Func.createWalker = recursivelyDomSomething;
+
+function arraySplit(arr, ele) {
+    var a = [];
+    var b = [];
+    var e;
+    for (var i = 0; i < arr.length; i++) {
+        if ((e = arr[i]) != ele) {
+            a.push(e);
+        } else {
+            b.push(e);
+        }
+    }
+    return [a, b];
+}
+
+function ensureArrayContains(arr, ele) {
+    return arraySplit(arr, ele)[0].concat([ele]);
+}
+
+function ensureArrayWithout(arr, ele) {
+    return arraySplit(arr, ele)[0];
+}
+
+Func.arrayEnsureContains = ensureArrayContains;
+Func.arrayEnsureWithout = ensureArrayWithout;
+
+module.exports = Func;
+},{"coreutil/mini":3}],36:[function(require,module,exports){
+var N = {};
+
+var Func = require('./funchelper');
+var Mini = require('coreutil/mini');
+
+function insertElementAfter(targetElement, newElement) {
+    if (typeof newElement === 'string') {
+        return targetElement.insertAdjacentHTML('afterend', newElement);
+    }
+    if (targetElement.nodeType !== Element.DOCUMENT_NODE) {
+        targetElement.parentNode.insertBefore(newElement, targetElement.nextSibling);
+    }
+}
+
+function insertElementBefore(targetElement, newElement) {
+    if (typeof newElement === 'string') {
+        return targetElement.insertAdjacentHTML('beforebegin', newElement);
+    }
+    if (targetElement.nodeType !== Element.DOCUMENT_NODE) {
+        targetElement.parentNode.insertBefore(newElement, targetElement);
+    }
+}
+
+function insertElementAtBeginning(targetElement, newElement) {
+    if (typeof newElement === 'string') {
+        return targetElement.insertAdjacentHTML('afterbegin', newElement);
+    }
+    targetElement.insertBefore(newElement, targetElement.firstChild);
+}
+
+function insertElementAtEnd(targetElement, newElement) {
+    if (typeof targetElement === 'string') {
+        return targetElement.insertAdjacentHTML('beforeend', newElement);
+    }
+    targetElement.appendChild(newElement);
+    // targetElement.insertBefore(newElement, targetElement.lastChild);
+}
+
+function basePender(strategy) {
+    return function(base, newElement) {
+        return Func.createWalker(base, strategy, [base, newElement]);
+    };
+}
+
+var baseAppend = basePender(insertElementAtEnd);
+var basePrepend = basePender(insertElementAtBeginning);
+var baseInsertHead = basePender(insertElementBefore);
+var baseInsertEnd = basePender(insertElementAfter);
+
+//can be abstracted
+function pender(basePender) {
+    return function(newElements) {
+        var base = this;
+        if (Mini.isArrayLike(newElements)) {
+            Mini.arrayEach(newElements, function(ele) {
+                basePender(base, ele);
+            });
+        } else {
+            basePender(base, newElements);
+        }
+    };
+}
+
+var append = pender(baseAppend);
+var prepend = pender(basePrepend);
+var insertAtHead = pender(baseInsertHead);
+var insertAtEnd = pender(baseInsertEnd);
+
+N.append = append;
+N.prepend = prepend;
+N.insertHead = insertAtHead;
+N.insertTail = insertAtEnd;
+
+module.exports = N;
+},{"./funchelper":35,"coreutil/mini":3}],37:[function(require,module,exports){
+/*
+ * Vendor specified properties list
+ */
+
+var V = {};
+
+V.attrs = {
+    "align-content": [
+        "-webkit-align-content"
+    ],
+    "align-items": [
+        "-webkit-align-items"
+    ],
+    "align-self": [
+        "-webkit-align-self"
+    ],
+    "animation": [
+        "-webkit-animation",
+        "-ms-animation"
+    ],
+    "animation-delay": [
+        "-webkit-animation-delay",
+        "-ms-animation-delay"
+    ],
+    "animation-direction": [
+        "-webkit-animation-direction",
+        "-ms-animation-direction"
+    ],
+    "animation-duration": [
+        "-webkit-animation-duration",
+        "-ms-animation-duration"
+    ],
+    "animation-fill-mode": [
+        "-webkit-animation-fill-mode",
+        "-ms-animation-fill-mode"
+    ],
+    "animation-iteration-count": [
+        "-webkit-animation-iteration-count",
+        "-ms-animation-iteration-count"
+    ],
+    "animation-name": [
+        "-webkit-animation-name",
+        "-ms-animation-name"
+    ],
+    "animation-play-state": [
+        "-webkit-animation-play-state",
+        "-ms-animation-play-state"
+    ],
+    "animation-timing-function": [
+        "-webkit-animation-timing-function",
+        "-ms-animation-timing-function"
+    ],
+    "app-region": [
+        "-webkit-app-region"
+    ],
+    "appearance": [
+        "-webkit-appearance",
+        "-moz-appearance"
+    ],
+    "aspect-ratio": [
+        "-webkit-aspect-ratio"
+    ],
+    "backface-visibility": [
+        "-webkit-backface-visibility",
+        "-ms-backface-visibility"
+    ],
+    "background-clip": [
+        "-webkit-background-clip"
+    ],
+    "background-composite": [
+        "-webkit-background-composite"
+    ],
+    "background-origin": [
+        "-webkit-background-origin"
+    ],
+    "background-size": [
+        "-webkit-background-size"
+    ],
+    "border-after": [
+        "-webkit-border-after"
+    ],
+    "border-after-color": [
+        "-webkit-border-after-color"
+    ],
+    "border-after-style": [
+        "-webkit-border-after-style"
+    ],
+    "border-after-width": [
+        "-webkit-border-after-width"
+    ],
+    "border-before": [
+        "-webkit-border-before"
+    ],
+    "border-before-color": [
+        "-webkit-border-before-color"
+    ],
+    "border-before-style": [
+        "-webkit-border-before-style"
+    ],
+    "border-before-width": [
+        "-webkit-border-before-width"
+    ],
+    "border-bottom-left-radius": [
+        "-webkit-border-bottom-left-radius"
+    ],
+    "border-bottom-right-radius": [
+        "-webkit-border-bottom-right-radius"
+    ],
+    "border-end": [
+        "-webkit-border-end",
+        "-moz-border-end"
+    ],
+    "border-end-color": [
+        "-webkit-border-end-color",
+        "-moz-border-end-color"
+    ],
+    "border-end-style": [
+        "-webkit-border-end-style",
+        "-moz-border-end-style"
+    ],
+    "border-end-width": [
+        "-webkit-border-end-width",
+        "-moz-border-end-width"
+    ],
+    "border-fit": [
+        "-webkit-border-fit"
+    ],
+    "border-horizontal-spacing": [
+        "-webkit-border-horizontal-spacing"
+    ],
+    "border-image": [
+        "-webkit-border-image"
+    ],
+    "border-radius": [
+        "-webkit-border-radius"
+    ],
+    "border-start": [
+        "-webkit-border-start",
+        "-moz-border-start"
+    ],
+    "border-start-color": [
+        "-webkit-border-start-color",
+        "-moz-border-start-color"
+    ],
+    "border-start-style": [
+        "-webkit-border-start-style",
+        "-moz-border-start-style"
+    ],
+    "border-start-width": [
+        "-webkit-border-start-width",
+        "-moz-border-start-width"
+    ],
+    "border-top-left-radius": [
+        "-webkit-border-top-left-radius"
+    ],
+    "border-top-right-radius": [
+        "-webkit-border-top-right-radius"
+    ],
+    "border-vertical-spacing": [
+        "-webkit-border-vertical-spacing"
+    ],
+    "box-align": [
+        "-webkit-box-align",
+        "-moz-box-align"
+    ],
+    "box-decoration-break": [
+        "-webkit-box-decoration-break"
+    ],
+    "box-direction": [
+        "-webkit-box-direction",
+        "-moz-box-direction"
+    ],
+    "box-flex": [
+        "-webkit-box-flex",
+        "-moz-box-flex"
+    ],
+    "box-flex-group": [
+        "-webkit-box-flex-group"
+    ],
+    "box-lines": [
+        "-webkit-box-lines"
+    ],
+    "box-ordinal-group": [
+        "-webkit-box-ordinal-group",
+        "-moz-box-ordinal-group"
+    ],
+    "box-orient": [
+        "-webkit-box-orient",
+        "-moz-box-orient"
+    ],
+    "box-pack": [
+        "-webkit-box-pack",
+        "-moz-box-pack"
+    ],
+    "box-reflect": [
+        "-webkit-box-reflect"
+    ],
+    "box-shadow": [
+        "-webkit-box-shadow"
+    ],
+    "box-sizing": [
+        "-webkit-box-sizing"
+    ],
+    "clip-path": [
+        "-webkit-clip-path"
+    ],
+    "column-break-after": [
+        "-webkit-column-break-after"
+    ],
+    "column-break-before": [
+        "-webkit-column-break-before"
+    ],
+    "column-break-inside": [
+        "-webkit-column-break-inside"
+    ],
+    "column-count": [
+        "-webkit-column-count",
+        "-moz-column-count"
+    ],
+    "column-gap": [
+        "-webkit-column-gap",
+        "-moz-column-gap"
+    ],
+    "column-rule": [
+        "-webkit-column-rule",
+        "-moz-column-rule"
+    ],
+    "column-rule-color": [
+        "-webkit-column-rule-color",
+        "-moz-column-rule-color"
+    ],
+    "column-rule-style": [
+        "-webkit-column-rule-style",
+        "-moz-column-rule-style"
+    ],
+    "column-rule-width": [
+        "-webkit-column-rule-width",
+        "-moz-column-rule-width"
+    ],
+    "column-span": [
+        "-webkit-column-span"
+    ],
+    "column-width": [
+        "-webkit-column-width",
+        "-moz-column-width"
+    ],
+    "columns": [
+        "-webkit-columns",
+        "-moz-columns"
+    ],
+    "filter": [
+        "-webkit-filter",
+        "-ms-filter"
+    ],
+    "flex": [
+        "-webkit-flex",
+        "-ms-flex"
+    ],
+    "flex-basis": [
+        "-webkit-flex-basis"
+    ],
+    "flex-direction": [
+        "-webkit-flex-direction",
+        "-ms-flex-direction"
+    ],
+    "flex-flow": [
+        "-webkit-flex-flow",
+        "-ms-flex-flow"
+    ],
+    "flex-grow": [
+        "-webkit-flex-grow"
+    ],
+    "flex-shrink": [
+        "-webkit-flex-shrink"
+    ],
+    "flex-wrap": [
+        "-webkit-flex-wrap",
+        "-ms-flex-wrap"
+    ],
+    "font-feature-settings": [
+        "-webkit-font-feature-settings",
+        "-ms-font-feature-settings"
+    ],
+    "font-size-delta": [
+        "-webkit-font-size-delta"
+    ],
+    "font-smoothing": [
+        "-webkit-font-smoothing"
+    ],
+    "highlight": [
+        "-webkit-highlight"
+    ],
+    "hyphenate-character": [
+        "-webkit-hyphenate-character"
+    ],
+    "justify-content": [
+        "-webkit-justify-content"
+    ],
+    "line-box-contain": [
+        "-webkit-line-box-contain"
+    ],
+    "line-break": [
+        "-webkit-line-break",
+        "-ms-line-break"
+    ],
+    "line-clamp": [
+        "-webkit-line-clamp"
+    ],
+    "locale": [
+        "-webkit-locale"
+    ],
+    "logical-height": [
+        "-webkit-logical-height"
+    ],
+    "logical-width": [
+        "-webkit-logical-width"
+    ],
+    "margin-after": [
+        "-webkit-margin-after"
+    ],
+    "margin-after-collapse": [
+        "-webkit-margin-after-collapse"
+    ],
+    "margin-before": [
+        "-webkit-margin-before"
+    ],
+    "margin-before-collapse": [
+        "-webkit-margin-before-collapse"
+    ],
+    "margin-bottom-collapse": [
+        "-webkit-margin-bottom-collapse"
+    ],
+    "margin-collapse": [
+        "-webkit-margin-collapse"
+    ],
+    "margin-end": [
+        "-webkit-margin-end",
+        "-moz-margin-end"
+    ],
+    "margin-start": [
+        "-webkit-margin-start",
+        "-moz-margin-start"
+    ],
+    "margin-top-collapse": [
+        "-webkit-margin-top-collapse"
+    ],
+    "mask": [
+        "-webkit-mask"
+    ],
+    "mask-box-image": [
+        "-webkit-mask-box-image"
+    ],
+    "mask-box-image-outset": [
+        "-webkit-mask-box-image-outset"
+    ],
+    "mask-box-image-repeat": [
+        "-webkit-mask-box-image-repeat"
+    ],
+    "mask-box-image-slice": [
+        "-webkit-mask-box-image-slice"
+    ],
+    "mask-box-image-source": [
+        "-webkit-mask-box-image-source"
+    ],
+    "mask-box-image-width": [
+        "-webkit-mask-box-image-width"
+    ],
+    "mask-clip": [
+        "-webkit-mask-clip"
+    ],
+    "mask-composite": [
+        "-webkit-mask-composite"
+    ],
+    "mask-image": [
+        "-webkit-mask-image"
+    ],
+    "mask-origin": [
+        "-webkit-mask-origin"
+    ],
+    "mask-position": [
+        "-webkit-mask-position"
+    ],
+    "mask-position-x": [
+        "-webkit-mask-position-x"
+    ],
+    "mask-position-y": [
+        "-webkit-mask-position-y"
+    ],
+    "mask-repeat": [
+        "-webkit-mask-repeat"
+    ],
+    "mask-repeat-x": [
+        "-webkit-mask-repeat-x"
+    ],
+    "mask-repeat-y": [
+        "-webkit-mask-repeat-y"
+    ],
+    "mask-size": [
+        "-webkit-mask-size"
+    ],
+    "max-logical-height": [
+        "-webkit-max-logical-height"
+    ],
+    "max-logical-width": [
+        "-webkit-max-logical-width"
+    ],
+    "min-logical-height": [
+        "-webkit-min-logical-height"
+    ],
+    "min-logical-width": [
+        "-webkit-min-logical-width"
+    ],
+    "opacity": [
+        "-webkit-opacity"
+    ],
+    "order": [
+        "-webkit-order"
+    ],
+    "padding-after": [
+        "-webkit-padding-after"
+    ],
+    "padding-before": [
+        "-webkit-padding-before"
+    ],
+    "padding-end": [
+        "-webkit-padding-end",
+        "-moz-padding-end"
+    ],
+    "padding-start": [
+        "-webkit-padding-start",
+        "-moz-padding-start"
+    ],
+    "perspective": [
+        "-webkit-perspective",
+        "-ms-perspective"
+    ],
+    "perspective-origin": [
+        "-webkit-perspective-origin",
+        "-ms-perspective-origin"
+    ],
+    "perspective-origin-x": [
+        "-webkit-perspective-origin-x",
+        "-ms-perspective-origin-x"
+    ],
+    "perspective-origin-y": [
+        "-webkit-perspective-origin-y",
+        "-ms-perspective-origin-y"
+    ],
+    "print-color-adjust": [
+        "-webkit-print-color-adjust"
+    ],
+    "rtl-ordering": [
+        "-webkit-rtl-ordering"
+    ],
+    "ruby-position": [
+        "-webkit-ruby-position"
+    ],
+    "shape-image-threshold": [
+        "-webkit-shape-image-threshold"
+    ],
+    "shape-margin": [
+        "-webkit-shape-margin"
+    ],
+    "shape-outside": [
+        "-webkit-shape-outside"
+    ],
+    "tap-highlight-color": [
+        "-webkit-tap-highlight-color"
+    ],
+    "text-combine": [
+        "-webkit-text-combine"
+    ],
+    "text-decorations-in-effect": [
+        "-webkit-text-decorations-in-effect"
+    ],
+    "text-emphasis": [
+        "-webkit-text-emphasis"
+    ],
+    "text-emphasis-color": [
+        "-webkit-text-emphasis-color"
+    ],
+    "text-emphasis-position": [
+        "-webkit-text-emphasis-position"
+    ],
+    "text-emphasis-style": [
+        "-webkit-text-emphasis-style"
+    ],
+    "text-fill-color": [
+        "-webkit-text-fill-color"
+    ],
+    "text-orientation": [
+        "-webkit-text-orientation"
+    ],
+    "text-security": [
+        "-webkit-text-security"
+    ],
+    "text-stroke": [
+        "-webkit-text-stroke"
+    ],
+    "text-stroke-color": [
+        "-webkit-text-stroke-color"
+    ],
+    "text-stroke-width": [
+        "-webkit-text-stroke-width"
+    ],
+    "transform": [
+        "-webkit-transform",
+        "-moz-transform",
+        "-ms-transform"
+    ],
+    "transform-origin": [
+        "-webkit-transform-origin",
+        "-ms-transform-origin"
+    ],
+    "transform-origin-x": [
+        "-webkit-transform-origin-x",
+        "-ms-transform-origin-x"
+    ],
+    "transform-origin-y": [
+        "-webkit-transform-origin-y",
+        "-ms-transform-origin-y"
+    ],
+    "transform-origin-z": [
+        "-webkit-transform-origin-z",
+        "-ms-transform-origin-z"
+    ],
+    "transform-style": [
+        "-webkit-transform-style",
+        "-ms-transform-style"
+    ],
+    "transition": [
+        "-webkit-transition",
+        "-ms-transition"
+    ],
+    "transition-delay": [
+        "-webkit-transition-delay",
+        "-ms-transition-delay"
+    ],
+    "transition-duration": [
+        "-webkit-transition-duration",
+        "-ms-transition-duration"
+    ],
+    "transition-property": [
+        "-webkit-transition-property",
+        "-ms-transition-property"
+    ],
+    "transition-timing-function": [
+        "-webkit-transition-timing-function",
+        "-ms-transition-timing-function"
+    ],
+    "user-drag": [
+        "-webkit-user-drag"
+    ],
+    "user-modify": [
+        "-webkit-user-modify",
+        "-moz-user-modify"
+    ],
+    "user-select": [
+        "-webkit-user-select",
+        "-moz-user-select",
+        "-ms-user-select"
+    ],
+    "writing-mode": [
+        "-webkit-writing-mode",
+        "-ms-writing-mode"
+    ],
+    "alt": [
+        "-webkit-alt"
+    ],
+    "animation-trigger": [
+        "-webkit-animation-trigger"
+    ],
+    "backdrop-filter": [
+        "-webkit-backdrop-filter"
+    ],
+    "color-correction": [
+        "-webkit-color-correction"
+    ],
+    "column-axis": [
+        "-webkit-column-axis"
+    ],
+    "column-fill": [
+        "-webkit-column-fill",
+        "-moz-column-fill"
+    ],
+    "column-progression": [
+        "-webkit-column-progression"
+    ],
+    "cursor-visibility": [
+        "-webkit-cursor-visibility"
+    ],
+    "dashboard-region": [
+        "-webkit-dashboard-region"
+    ],
+    "flow-from": [
+        "-webkit-flow-from",
+        "-ms-flow-from"
+    ],
+    "flow-into": [
+        "-webkit-flow-into",
+        "-ms-flow-into"
+    ],
+    "font-kerning": [
+        "-webkit-font-kerning"
+    ],
+    "font-variant-ligatures": [
+        "-webkit-font-variant-ligatures"
+    ],
+    "grid": [
+        "-webkit-grid"
+    ],
+    "grid-area": [
+        "-webkit-grid-area"
+    ],
+    "grid-auto-columns": [
+        "-webkit-grid-auto-columns"
+    ],
+    "grid-auto-flow": [
+        "-webkit-grid-auto-flow"
+    ],
+    "grid-auto-rows": [
+        "-webkit-grid-auto-rows"
+    ],
+    "grid-column": [
+        "-webkit-grid-column",
+        "-ms-grid-column"
+    ],
+    "grid-column-end": [
+        "-webkit-grid-column-end"
+    ],
+    "grid-column-gap": [
+        "-webkit-grid-column-gap"
+    ],
+    "grid-column-start": [
+        "-webkit-grid-column-start"
+    ],
+    "grid-gap": [
+        "-webkit-grid-gap"
+    ],
+    "grid-row": [
+        "-webkit-grid-row",
+        "-ms-grid-row"
+    ],
+    "grid-row-end": [
+        "-webkit-grid-row-end"
+    ],
+    "grid-row-gap": [
+        "-webkit-grid-row-gap"
+    ],
+    "grid-row-start": [
+        "-webkit-grid-row-start"
+    ],
+    "grid-template": [
+        "-webkit-grid-template"
+    ],
+    "grid-template-areas": [
+        "-webkit-grid-template-areas"
+    ],
+    "grid-template-columns": [
+        "-webkit-grid-template-columns"
+    ],
+    "grid-template-rows": [
+        "-webkit-grid-template-rows"
+    ],
+    "hyphenate-limit-after": [
+        "-webkit-hyphenate-limit-after"
+    ],
+    "hyphenate-limit-before": [
+        "-webkit-hyphenate-limit-before"
+    ],
+    "hyphenate-limit-lines": [
+        "-webkit-hyphenate-limit-lines",
+        "-ms-hyphenate-limit-lines"
+    ],
+    "hyphens": [
+        "-webkit-hyphens",
+        "-moz-hyphens",
+        "-ms-hyphens"
+    ],
+    "initial-letter": [
+        "-webkit-initial-letter"
+    ],
+    "justify-items": [
+        "-webkit-justify-items"
+    ],
+    "justify-self": [
+        "-webkit-justify-self"
+    ],
+    "line-align": [
+        "-webkit-line-align"
+    ],
+    "line-grid": [
+        "-webkit-line-grid"
+    ],
+    "line-snap": [
+        "-webkit-line-snap"
+    ],
+    "marquee": [
+        "-webkit-marquee"
+    ],
+    "marquee-direction": [
+        "-webkit-marquee-direction"
+    ],
+    "marquee-increment": [
+        "-webkit-marquee-increment"
+    ],
+    "marquee-repetition": [
+        "-webkit-marquee-repetition"
+    ],
+    "marquee-speed": [
+        "-webkit-marquee-speed"
+    ],
+    "marquee-style": [
+        "-webkit-marquee-style"
+    ],
+    "mask-source-type": [
+        "-webkit-mask-source-type"
+    ],
+    "nbsp-mode": [
+        "-webkit-nbsp-mode"
+    ],
+    "overflow-scrolling": [
+        "-webkit-overflow-scrolling"
+    ],
+    "region-break-after": [
+        "-webkit-region-break-after"
+    ],
+    "region-break-before": [
+        "-webkit-region-break-before"
+    ],
+    "region-break-inside": [
+        "-webkit-region-break-inside"
+    ],
+    "region-fragment": [
+        "-webkit-region-fragment"
+    ],
+    "scroll-snap-coordinate": [
+        "-webkit-scroll-snap-coordinate"
+    ],
+    "scroll-snap-destination": [
+        "-webkit-scroll-snap-destination"
+    ],
+    "scroll-snap-points-x": [
+        "-webkit-scroll-snap-points-x",
+        "-ms-scroll-snap-points-x"
+    ],
+    "scroll-snap-points-y": [
+        "-webkit-scroll-snap-points-y",
+        "-ms-scroll-snap-points-y"
+    ],
+    "scroll-snap-type": [
+        "-webkit-scroll-snap-type",
+        "-ms-scroll-snap-type"
+    ],
+    "svg-shadow": [
+        "-webkit-svg-shadow"
+    ],
+    "text-align-last": [
+        "-webkit-text-align-last",
+        "-moz-text-align-last",
+        "-ms-text-align-last"
+    ],
+    "text-decoration": [
+        "-webkit-text-decoration"
+    ],
+    "text-decoration-color": [
+        "-webkit-text-decoration-color",
+        "-moz-text-decoration-color"
+    ],
+    "text-decoration-line": [
+        "-webkit-text-decoration-line",
+        "-moz-text-decoration-line"
+    ],
+    "text-decoration-skip": [
+        "-webkit-text-decoration-skip"
+    ],
+    "text-decoration-style": [
+        "-webkit-text-decoration-style",
+        "-moz-text-decoration-style"
+    ],
+    "text-justify": [
+        "-webkit-text-justify",
+        "-ms-text-justify"
+    ],
+    "text-size-adjust": [
+        "-webkit-text-size-adjust",
+        "-moz-text-size-adjust",
+        "-ms-text-size-adjust"
+    ],
+    "text-underline-position": [
+        "-webkit-text-underline-position",
+        "-ms-text-underline-position"
+    ],
+    "text-zoom": [
+        "-webkit-text-zoom"
+    ],
+    "touch-callout": [
+        "-webkit-touch-callout"
+    ],
+    "binding": [
+        "-moz-binding"
+    ],
+    "border-bottom-colors": [
+        "-moz-border-bottom-colors"
+    ],
+    "border-left-colors": [
+        "-moz-border-left-colors"
+    ],
+    "border-right-colors": [
+        "-moz-border-right-colors"
+    ],
+    "border-top-colors": [
+        "-moz-border-top-colors"
+    ],
+    "control-character-visibility": [
+        "-moz-control-character-visibility"
+    ],
+    "float-edge": [
+        "-moz-float-edge"
+    ],
+    "force-broken-image-icon": [
+        "-moz-force-broken-image-icon"
+    ],
+    "image-region": [
+        "-moz-image-region"
+    ],
+    "math-display": [
+        "-moz-math-display"
+    ],
+    "math-variant": [
+        "-moz-math-variant"
+    ],
+    "min-font-size-ratio": [
+        "-moz-min-font-size-ratio"
+    ],
+    "orient": [
+        "-moz-orient"
+    ],
+    "osx-font-smoothing": [
+        "-moz-osx-font-smoothing"
+    ],
+    "outline-radius": [
+        "-moz-outline-radius"
+    ],
+    "outline-radius-bottomleft": [
+        "-moz-outline-radius-bottomleft"
+    ],
+    "outline-radius-bottomright": [
+        "-moz-outline-radius-bottomright"
+    ],
+    "outline-radius-topleft": [
+        "-moz-outline-radius-topleft"
+    ],
+    "outline-radius-topright": [
+        "-moz-outline-radius-topright"
+    ],
+    "script-level": [
+        "-moz-script-level"
+    ],
+    "script-min-size": [
+        "-moz-script-min-size"
+    ],
+    "script-size-multiplier": [
+        "-moz-script-size-multiplier"
+    ],
+    "stack-sizing": [
+        "-moz-stack-sizing"
+    ],
+    "tab-size": [
+        "-moz-tab-size"
+    ],
+    "top-layer": [
+        "-moz-top-layer"
+    ],
+    "user-focus": [
+        "-moz-user-focus"
+    ],
+    "user-input": [
+        "-moz-user-input"
+    ],
+    "window-dragging": [
+        "-moz-window-dragging"
+    ],
+    "window-shadow": [
+        "-moz-window-shadow"
+    ],
+    "accelerator": [
+        "-ms-accelerator"
+    ],
+    "background-position-x": [
+        "-ms-background-position-x"
+    ],
+    "background-position-y": [
+        "-ms-background-position-y"
+    ],
+    "behavior": [
+        "-ms-behavior"
+    ],
+    "block-progression": [
+        "-ms-block-progression"
+    ],
+    "content-zoom-chaining": [
+        "-ms-content-zoom-chaining"
+    ],
+    "content-zoom-limit": [
+        "-ms-content-zoom-limit"
+    ],
+    "content-zoom-limit-max": [
+        "-ms-content-zoom-limit-max"
+    ],
+    "content-zoom-limit-min": [
+        "-ms-content-zoom-limit-min"
+    ],
+    "content-zoom-snap": [
+        "-ms-content-zoom-snap"
+    ],
+    "content-zoom-snap-points": [
+        "-ms-content-zoom-snap-points"
+    ],
+    "content-zoom-snap-type": [
+        "-ms-content-zoom-snap-type"
+    ],
+    "content-zooming": [
+        "-ms-content-zooming"
+    ],
+    "flex-align": [
+        "-ms-flex-align"
+    ],
+    "flex-item-align": [
+        "-ms-flex-item-align"
+    ],
+    "flex-line-pack": [
+        "-ms-flex-line-pack"
+    ],
+    "flex-negative": [
+        "-ms-flex-negative"
+    ],
+    "flex-order": [
+        "-ms-flex-order"
+    ],
+    "flex-pack": [
+        "-ms-flex-pack"
+    ],
+    "flex-positive": [
+        "-ms-flex-positive"
+    ],
+    "flex-preferred-size": [
+        "-ms-flex-preferred-size"
+    ],
+    "grid-column-align": [
+        "-ms-grid-column-align"
+    ],
+    "grid-column-span": [
+        "-ms-grid-column-span"
+    ],
+    "grid-columns": [
+        "-ms-grid-columns"
+    ],
+    "grid-row-align": [
+        "-ms-grid-row-align"
+    ],
+    "grid-row-span": [
+        "-ms-grid-row-span"
+    ],
+    "grid-rows": [
+        "-ms-grid-rows"
+    ],
+    "high-contrast-adjust": [
+        "-ms-high-contrast-adjust"
+    ],
+    "hyphenate-limit-chars": [
+        "-ms-hyphenate-limit-chars"
+    ],
+    "hyphenate-limit-zone": [
+        "-ms-hyphenate-limit-zone"
+    ],
+    "ime-align": [
+        "-ms-ime-align"
+    ],
+    "ime-mode": [
+        "-ms-ime-mode"
+    ],
+    "interpolation-mode": [
+        "-ms-interpolation-mode"
+    ],
+    "layout-flow": [
+        "-ms-layout-flow"
+    ],
+    "layout-grid": [
+        "-ms-layout-grid"
+    ],
+    "layout-grid-char": [
+        "-ms-layout-grid-char"
+    ],
+    "layout-grid-line": [
+        "-ms-layout-grid-line"
+    ],
+    "layout-grid-mode": [
+        "-ms-layout-grid-mode"
+    ],
+    "layout-grid-type": [
+        "-ms-layout-grid-type"
+    ],
+    "overflow-style": [
+        "-ms-overflow-style"
+    ],
+    "overflow-x": [
+        "-ms-overflow-x"
+    ],
+    "overflow-y": [
+        "-ms-overflow-y"
+    ],
+    "scroll-chaining": [
+        "-ms-scroll-chaining"
+    ],
+    "scroll-limit": [
+        "-ms-scroll-limit"
+    ],
+    "scroll-limit-x-max": [
+        "-ms-scroll-limit-x-max"
+    ],
+    "scroll-limit-x-min": [
+        "-ms-scroll-limit-x-min"
+    ],
+    "scroll-limit-y-max": [
+        "-ms-scroll-limit-y-max"
+    ],
+    "scroll-limit-y-min": [
+        "-ms-scroll-limit-y-min"
+    ],
+    "scroll-rails": [
+        "-ms-scroll-rails"
+    ],
+    "scroll-snap-x": [
+        "-ms-scroll-snap-x"
+    ],
+    "scroll-snap-y": [
+        "-ms-scroll-snap-y"
+    ],
+    "scroll-translation": [
+        "-ms-scroll-translation"
+    ],
+    "scrollbar-3dlight-color": [
+        "-ms-scrollbar-3dlight-color"
+    ],
+    "scrollbar-arrow-color": [
+        "-ms-scrollbar-arrow-color"
+    ],
+    "scrollbar-base-color": [
+        "-ms-scrollbar-base-color"
+    ],
+    "scrollbar-darkshadow-color": [
+        "-ms-scrollbar-darkshadow-color"
+    ],
+    "scrollbar-face-color": [
+        "-ms-scrollbar-face-color"
+    ],
+    "scrollbar-highlight-color": [
+        "-ms-scrollbar-highlight-color"
+    ],
+    "scrollbar-shadow-color": [
+        "-ms-scrollbar-shadow-color"
+    ],
+    "scrollbar-track-color": [
+        "-ms-scrollbar-track-color"
+    ],
+    "text-autospace": [
+        "-ms-text-autospace"
+    ],
+    "text-combine-horizontal": [
+        "-ms-text-combine-horizontal"
+    ],
+    "text-kashida-space": [
+        "-ms-text-kashida-space"
+    ],
+    "text-overflow": [
+        "-ms-text-overflow"
+    ],
+    "touch-action": [
+        "-ms-touch-action"
+    ],
+    "touch-select": [
+        "-ms-touch-select"
+    ],
+    "word-break": [
+        "-ms-word-break"
+    ],
+    "word-wrap": [
+        "-ms-word-wrap"
+    ],
+    "wrap-flow": [
+        "-ms-wrap-flow"
+    ],
+    "wrap-margin": [
+        "-ms-wrap-margin"
+    ],
+    "wrap-through": [
+        "-ms-wrap-through"
+    ],
+    "zoom": [
+        "-ms-zoom"
+    ]
+};
+
+V.toCamel = function(str) {
+    return str.replace(/-[a-z]/g, function($1) {
+        return $1[1].toUpperCase();
+    });
+};
+
+V.fromCamel = function(str) {
+    return str.replace(/[A-Z]/g, function($1) {
+        return '-' + $1.toLowerCase();
+    });
+};
+
+V.query = function(attr) {
+    var a = V.fromCamel(attr);
+    var list;
+    if (a != attr) {
+        list = V.attrs[a] || [];
+    } else {
+        list = V.attrs[attr] || [];
+    }
+    return list;
+};
+
+module.exports = V;
 },{}],38:[function(require,module,exports){
 var H = require('coreutil/core');
 var N = require('./src/network');
@@ -8686,8 +8733,6 @@ var noop = function() {};
 C.root.serverPath = N.serverPath = "http://dev.indoorstar.com/ids/";
 C.root.dataServer = N.dataServer = "http://indoorstar.com:6601/";
 C.root.innerServer = N.innerServer = "http://dev.indoorstar.com:6603/ids/";
-
-N.__catching = true;
 
 N.setActionHeader = function(url) {
     C.root.serverPath = N.serverPath = url;
@@ -8779,52 +8824,6 @@ var prepareRequest = function(url, method, async, data, type, callback, errback,
     var req = {};
     req.request = new XMLHttpRequest();
 
-    if (C.root.H.debug) {
-        //TODO: should add a StackTraceStack class and a context tree
-        trace = trace || [];
-        if (!C.isArrayLike(trace) || typeof trace == 'string') {
-            trace = [trace];
-        }
-        trace.unshift(C.getStackTrace());
-
-        function printTrace(e) {
-            try {
-                trace.unshift(e);
-                C.printStackTrace(undefined, trace, true);
-            } catch (e) {
-                //ignore InformError
-            }
-        }
-
-        function catchInform(func) {
-            return function() {
-                var __ = C.__catching;
-                C.__catching = true;
-                try {
-                    func.apply(env, arguments);
-                } catch (e) {
-                    printTrace(e);
-                }
-                C.__catching = __;
-            };
-        }
-
-        //noinspection JSUnusedGlobalSymbols
-        this.stackTrace = trace;
-        var oldCb = callback;
-        var errCb = errback;
-        var env = this;
-        env.__catching = true;
-        if (oldCb) {
-            callback.stackTrace = trace;
-            callback = catchInform(oldCb);
-        }
-        if (errCb) {
-            errback.stackTrace = trace;
-            errback = catchInform(errCb);
-        }
-    }
-
     req.open = function() {
         req.request.open();
     };
@@ -8897,91 +8896,76 @@ var innerPostRequest = function(url, type, data, callback, errback, trace) {
     prepareRequest(url, 'POST', true, data, null, callback, errback, trace).send();
 };
 
-N.getRequest = function(url, callback, errback, type, trace) {
-    return innerGetRequest(url, executors[type || 'raw'], callback, errback, trace);
+N.getRequest = function(url, callback, errback, type) {
+    return innerGetRequest(url, executors[type || 'raw'], callback, errback);
 };
 
-N.getJson = function(url, callback, errback, overrideType, trace) {
-    return innerGetRequest(url, executors[overrideType || 'json'], callback, errback, trace);
+N.getJson = function(url, callback, errback, overrideType) {
+    return innerGetRequest(url, executors[overrideType || 'json'], callback, errback);
 };
 
-N.getBuffer = function(url, callback, errback, trace) {
-    return innerGetRequest(url, executors.arraybuffer, callback, errback, trace);
+N.getBuffer = function(url, callback, errback) {
+    return innerGetRequest(url, executors.arraybuffer, callback, errback);
 };
 
-N.getBlob = function(url, callback, errback, trace) {
-    return innerGetRequest(url, executors.blob, callback, errback, trace);
+N.getBlob = function(url, callback, errback) {
+    return innerGetRequest(url, executors.blob, callback, errback);
 };
 
-N.getForm = function(url, callback, errback, trace) {
-    return innerGetRequest(url, executors.form, callback, errback, trace);
+N.getForm = function(url, callback, errback) {
+    return innerGetRequest(url, executors.form, callback, errback);
 };
 
-N.getRaw = function(url, callback, errback, trace) {
+N.getRaw = function(url, callback, errback) {
     return innerGetRequest(url, executors.arraybuffer, function(d) {
         try {
             callback(Enc.handleActionRaw(d));
         } catch (e) {
             callback(d);
         }
-    }, errback, trace);
+    }, errback);
 };
 
-N.postRequest = function(url, body, callback, errback, trace) {
-    return innerPostRequest(url, {}, body, callback, errback, trace);
+N.postRequest = function(url, body, callback, errback) {
+    return innerPostRequest(url, {}, body, callback, errback);
 };
 
-N.postForm = function(url, form, callback, errback, trace) {
-    return N.postRequest(url, new FormData(form), callback, errback, trace);
+N.postForm = function(url, form, callback, errback) {
+    return N.postRequest(url, new FormData(form), callback, errback);
 };
 
-N.postJson = function(url, json, callback, errback, trace) {
+N.postJson = function(url, json, callback, errback) {
     return innerPostRequest(url, {
         'Accept': 'application/json',
         'Content-Type': 'application/json'
-    }, json, callback, errback, trace);
+    }, json, callback, errback);
 };
 
-N.postFile = function(url, file, callback, errback, trace) {
+N.postFile = function(url, file, callback, errback) {
     file = file instanceof File ? file : file.files[0];
     var form = new FormData();
     form.append('file', file);
-    N.postForm(url, form, callback, errback, trace);
+    N.postForm(url, form, callback, errback);
 };
 
-N.cGetAction = function(server, action, params, callback, errback, type, trace) {
-    if (typeof errback != 'function' && trace === undefined) {
-        //assume trace here
-        trace = type;
-        type = errback;
-        errback = noop;
-    }
-    if (typeof type != 'string' && trace === undefined) {
-        trace = type;
-        type = null;
-    }
+N.cGetAction = function(server, action, params, callback, errback, type) {
     return N.getBuffer(C.getUrlByParams(server, action, params), function(obj) {
         (callback || noop)(parseActionResponse(obj, type));
-    }, errback, trace);
+    }, errback);
 };
 
-N.getAction = function(action, params, callback, errback, trace) {
-    return N.cGetAction(N.serverPath, action, params, callback, errback, trace);
+N.getAction = function(action, params, callback, errback) {
+    return N.cGetAction(N.serverPath, action, params, callback, errback);
 };
 
 N.get = N.getRequest;
 
-N.cPostAction = function(server, action, params, data, callback, errback, trace) {
-    if (typeof errback != 'function' && trace === undefined) {
-        //assume trace here
-        trace = errback;
-        errback = noop;
-    }
-    return N.postRequest(C.getUrlByParams(server, action, params), C.param(data), callback, errback, trace);
+N.cPostAction = function(server, action, params, data, callback, errback) {
+    return N.postRequest(C.getUrlByParams(server, action, params), C.param(data), callback, errback);
 };
 
-N.postAction = function(action, params, data, callback, errback, trace) {
-    return N.cPostAction(N.serverPath, action, params, data, callback, errback, trace);
+N.postAction = function(action, params, data, callback, errback) {
+    return N.cPostAction(N.serverPath, action, params, data, callback, errback);
 };
 
 N.post = N.postRequest;
@@ -9157,7 +9141,7 @@ Parse.parseArrayBufferToJsonWithStringInD = parseArrayBufferToJsonWithStringInD;
 Parse.parseActionBufferDepth1 = parseArrayBufferJsonDepth1;
 
 module.exports = Parse;
-},{"coreutil/src/encoding":9}],41:[function(require,module,exports){
+},{"coreutil/src/encoding":16}],41:[function(require,module,exports){
 var C = {};
 
 var H$ = require('domutil/dom');
@@ -9211,4 +9195,4 @@ C.random = function(min, max) {
 };
 
 module.exports = C;
-},{"coreutil/core":2,"domutil/dom":22}]},{},[1]);
+},{"coreutil/core":2,"domutil/dom":29}]},{},[1]);
