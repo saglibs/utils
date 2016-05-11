@@ -6,7 +6,7 @@
 
     <groupId>com.sagnitude</groupId>
     <artifactId>utils</artifactId>
-    <version>0.1</version>
+    <version>0.2-SNAPSHOT</version>
 
     <name>utils</name>
 
@@ -18,22 +18,22 @@
         <dependency>
             <groupId>com.sagnitude</groupId>
             <artifactId>coreutil</artifactId>
-            <version>0.1</version>
+            <version>0.2-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.sagnitude</groupId>
             <artifactId>networkutil</artifactId>
-            <version>0.1</version>
+            <version>0.2-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.sagnitude</groupId>
             <artifactId>domutil</artifactId>
-            <version>0.1</version>
+            <version>0.2-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.sagnitude</groupId>
             <artifactId>cryptutil</artifactId>
-            <version>0.1</version>
+            <version>0.2-SNAPSHOT</version>
         </dependency>
     </dependencies>
 
