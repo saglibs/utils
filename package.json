@@ -19,12 +19,6 @@
     "url": "https://github.com/saglibs/utils/issues"
   },
   "homepage": "https://github.com/saglibs/utils#readme",
-  "dependencies": {
-    "coreutil": "saglibs/coreutil",
-    "cryptutil": "sagnitude/cryptutil",
-    "domutil": "saglibs/domutil",
-    "networkutil": "saglibs/networkutil"
-  },
   "devDependencies": {
     "browserify": "^13.0.1",
     "del": "^2.2.0",

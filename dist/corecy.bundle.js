@@ -3,7 +3,7 @@ var DOM = require('domutil/dom');
 var H = require('coreutil/core');
 var N = require('networkutil/network');
 
-var C = require('./src/main/javascript/compatibility');
+var C = require('./src/compatibility');
 
 require('cryptutil/crypt');
 
@@ -15,7 +15,7 @@ H.root.H = H;
 H.root.N = N;
 
 module.exports = H;
-},{"./src/main/javascript/compatibility":66,"coreutil/core":5,"cryptutil/crypt":25,"domutil/dom":46,"networkutil/network":63}],2:[function(require,module,exports){
+},{"./src/compatibility":66,"coreutil/core":5,"cryptutil/crypt":25,"domutil/dom":46,"networkutil/network":63}],2:[function(require,module,exports){
 'use strict'
 
 exports.toByteArray = toByteArray

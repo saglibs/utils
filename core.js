@@ -2,7 +2,7 @@ var DOM = require('domutil/dom');
 var H = require('coreutil/core');
 var N = require('networkutil/network');
 
-var C = require('./src/main/javascript/compatibility');
+var C = require('./src/compatibility');
 
 H.extend(H, DOM);
 H.extend(H, C);
